@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageCircleIcon, InstagramIcon, FacebookIcon } from 'lucide-react';
+import { MessageCircleIcon, InstagramIcon, FacebookIcon, ImageIcon } from 'lucide-react';
 import { Conversation } from '../../types';
 import { Badge } from '../ui/Badge';
 interface ConversationItemProps {
@@ -10,6 +10,9 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   conversation,
   onClick
 }) => {
+
+  console.log(conversation);
+  
   const getChannelIcon = () => {
     switch (conversation.channel) {
       case 'whatsapp':
@@ -31,10 +34,29 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
     return 'agora';
   };
   const initials = conversation.contactName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const renderLastMessage = () => {
+    if (conversation.lastMessageType === 'image') {
+      return (
+        <span className="flex items-center gap-1 text-sm text-gray-600 truncate">
+          <ImageIcon className="w-4 h-4 text-gray-500" />
+          <span className="truncate">{conversation.lastMessage || 'Imagem'}</span>
+        </span>
+      );
+    }
+    return conversation.lastMessage;
+  };
   return <div onClick={onClick} className="p-4 hover:bg-[#E5E7EB]/30 cursor-pointer transition-colors">
       <div className="flex gap-3">
-        <div className="w-12 h-12 rounded-full bg-[#0A84FF] text-white flex items-center justify-center font-medium flex-shrink-0">
-          {initials}
+         <div className="w-12 h-12 rounded-full bg-[#0A84FF] text-white flex items-center justify-center font-medium flex-shrink-0 overflow-hidden">
+          {conversation.contactAvatar ? (
+            <img
+              src={conversation.contactAvatar}
+              alt={`Foto de ${conversation.contactName}`}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            initials
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1">
@@ -46,7 +68,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
             </span>
           </div>
           <p className="text-sm text-gray-600 truncate mb-2">
-            {conversation.lastMessage}
+            {renderLastMessage()}
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             {getChannelIcon()}

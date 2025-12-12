@@ -16,7 +16,7 @@ import type { Channel, Tag } from '../types';
 export const Inbox: React.FC = () => {
   const navigate = useNavigate();
 
-  const { conversations, loading: isLoading } = useConversations({
+  const { conversations, loading: isLoading, markAsRead } = useConversations({
     status: 'open',
   });
 
@@ -56,7 +56,7 @@ export const Inbox: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-full bg-white">
+    <div className="flex h-full w-full bg-white overflow-hidden">
       {/* Sidebar */}
       <div className="w-96 border-r flex flex-col">
         <div className="p-4 border-b">
@@ -107,7 +107,10 @@ export const Inbox: React.FC = () => {
                 <ConversationItem
                   key={conv.id}
                   conversation={conv}
-                  onClick={() => navigate(`/chat/${conv.id}`)}
+                  onClick={() => {
+                    markAsRead(conv.id);
+                    navigate(`/chat/${conv.id}`);
+                  }}
                 />
               ))}
             </div>

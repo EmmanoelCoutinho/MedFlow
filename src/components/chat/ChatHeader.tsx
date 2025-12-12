@@ -12,8 +12,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onBack
 }) => {
   const initials = conversation.contactName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const avatar = conversation.contactAvatar;
   return (
-    <div className="border-b border-[#E5E7EB] bg-white p-4">
+    <div className="fixed inset-x-0 top-0 z-40 h-20 border-b border-[#E5E7EB] bg-white p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -22,8 +23,16 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           >
             <ArrowLeftIcon className="w-5 h-5 text-[#1E1E1E]" />
           </button>
-          <div className="w-10 h-10 rounded-full bg-[#0A84FF] text-white flex items-center justify-center font-medium">
-            {initials}
+          <div className="w-10 h-10 rounded-full bg-[#0A84FF] text-white flex items-center justify-center font-medium overflow-hidden">
+            {avatar ? (
+              <img
+                src={avatar}
+                alt={`Foto de ${conversation.contactName}`}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              initials
+            )}
           </div>
           <div>
             <h2 className="font-semibold text-[#1E1E1E]">

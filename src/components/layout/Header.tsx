@@ -39,8 +39,8 @@ export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
   }, [open]);
 
   return (
-    <header className="w-full border-b border-[#E5E7EB] bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+    <header className="w-full border-b border-[#E5E7EB] bg-white fixed top-0 h-16 z-50">
+      <div className="mx-auto max-w-7xl px-4 h-full flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/inbox" className="flex items-center gap-2 select-none">
             <div className="text-2xl font-bold text-[#0A84FF]">MedFlow</div>
@@ -98,4 +98,3 @@ export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
     </header>
   );
 };
-

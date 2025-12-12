@@ -5,7 +5,16 @@ export type Conversation = {
   channel: Channel;
   contactName: string;
   contactNumber?: string;
+  contactAvatar?: string;
   lastMessage: string;
+  lastMessageType?:
+    | 'text'
+    | 'image'
+    | 'audio'
+    | 'sticker'
+    | 'video'
+    | 'document'
+    | 'other';
   lastTimestamp: string;
   unreadCount: number;
   tag?: Tag;
@@ -17,7 +26,12 @@ export type Message = {
   conversationId: string;
   author: 'cliente' | 'atendente';
   text?: string;
+  type?: string;
   mediaUrl?: string;
+  image_url?: string;
+  mediaMimeType?: string;
+  payload?: any;
+  caption?: string;
   createdAt: string;
 };
 export type Metrics = {

@@ -6,16 +6,27 @@ import { Header } from './components/layout/Header';
 import { AuthProvider } from './contexts/AuthContext';
 function RoutedApp() {
   const location = useLocation();
-  const showHeader = location.pathname !== '/login';
+  const showHeader =
+    location.pathname !== '/login' && !location.pathname.startsWith('/chat');
   return (
     <>
-      {showHeader && <Header userName="Julia Andrade" userRole="Atendente" />}
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/inbox" element={<Inbox />} />
-        <Route path="/chat/:id" element={<Chat />} />
-        <Route path="/" element={<Navigate to="/login" replace />} />
-      </Routes>
+      {showHeader && (
+        <Header userName="Julia Andrade" userRole="Atendente" />
+      )}
+      <main
+        className={
+          showHeader
+            ? 'pt-16 h-[calc(100vh-64px)] overflow-hidden'
+            : 'min-h-screen'
+        }
+      >
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/inbox" element={<Inbox />} />
+          <Route path="/chat/:id" element={<Chat />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </main>
     </>
   );
 }

@@ -44,6 +44,13 @@ serve(async (req) => {
             const messageId = msg.id;
             const timestamp = new Date(Number(msg.timestamp) * 1000);
             const text = msg.text?.body ?? null;
+            const type = msg.type ?? "text";
+            const payload = msg ?? null;
+            const caption =
+              msg.text?.body ??
+              msg.image?.caption ??
+              msg.document?.caption ??
+              null;
 
             // 🧩 1. Upsert do contato
             const { data: contactData, error: contactError } = await supabase
@@ -87,15 +94,18 @@ serve(async (req) => {
             }
 
             // 🧩 3. Inserir mensagem
-            const { error: msgError } = await supabase.from("messages").upsert({
-              meta_message_id: messageId,
-              conversation_id: conversation.id,
-              direction: "inbound",
-              type: "text",
-              sender: waId,
-              text,
-              sent_at: timestamp,
-            });
+            const { error: msgError } = await supabase
+              .from("messages")
+              .upsert({
+                meta_message_id: messageId,
+                conversation_id: conversation.id,
+                direction: "inbound",
+                type,
+                sender: waId,
+                text: text ?? caption,
+                payload,
+                sent_at: timestamp,
+              });
             if (msgError) throw msgError;
 
             // 🧩 4. Atualizar last_message_at

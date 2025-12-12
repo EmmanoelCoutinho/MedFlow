@@ -1,24 +1,66 @@
-// src/pages/Chat.tsx
-import React, { useEffect, useState, useRef } from 'react';
+﻿// src/pages/Chat.tsx
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import type { Conversation, Message, Channel, Tag } from '../types';
+import { useMessages, mapDbMessage } from '../hooks/useMessages';
 import { Button } from '../components/ui/Button';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageInput } from '../components/chat/MessageInput';
+import { ArrowDownIcon } from 'lucide-react';
 
 export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-    const initialScrollDone = useRef(false);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const initialScrollDone = useRef(false);
 
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [loadingConversation, setLoadingConversation] = useState(true);
-  const [loadingMessages, setLoadingMessages] = useState(true);
 
+  const {
+    messages,
+    loading: loadingMessages,
+    setMessages,
+  } = useMessages(id ?? null);
+
+  // Sempre que trocar de conversa, resetamos o controle do scroll inicial
+  useEffect(() => {
+    initialScrollDone.current = false;
+    setMessages([]);
+    setShowScrollToBottom(false);
+  }, [id]);
+
+  // Sempre vai pro fim de verdade do container
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const container = messagesContainerRef.current;
+    const endEl = messagesEndRef.current;
+
+    if (endEl) {
+      endEl.scrollIntoView({ behavior, block: 'end' });
+    }
+
+    if (container) {
+      const top = container.scrollHeight;
+
+      if (behavior === 'smooth') {
+        container.scrollTo({
+          top,
+          behavior: 'smooth',
+        });
+      } else {
+        container.scrollTop = top;
+      }
+    }
+
+    setShowScrollToBottom(false);
+  }, []);
+
+  // Ao carregar as mensagens da conversa, sempre abrir no fim
   useEffect(() => {
     if (loadingMessages) return;
     if (!messages.length) return;
@@ -26,13 +68,63 @@ export const Chat: React.FC = () => {
 
     initialScrollDone.current = true;
 
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({
-        behavior: 'auto',
-        block: 'end',
-      });
-    }, 0);
-  }, [loadingMessages, messages.length]);
+    // roda apos layout
+    scrollToBottom('auto');
+    const timer = setTimeout(() => scrollToBottom('auto'), 0);
+    return () => clearTimeout(timer);
+  }, [loadingMessages, messages.length, scrollToBottom]);
+
+  // Checa se deve mostrar o botao "ir para o fim"
+  const handleScrollCheck = useCallback(
+    (e?: React.UIEvent<HTMLDivElement>) => {
+      const container =
+        (e?.currentTarget as HTMLDivElement | null) ?? messagesContainerRef.current;
+
+      if (container) {
+        const distanceToBottom =
+          container.scrollHeight - (container.scrollTop + container.clientHeight);
+        setShowScrollToBottom(distanceToBottom > 120);
+        return;
+      }
+
+      // fallback: se estiver rolando a pagina (body)
+      const doc = document.documentElement;
+      const distanceToBottom =
+        doc.scrollHeight - (window.scrollY + window.innerHeight);
+      setShowScrollToBottom(distanceToBottom > 120);
+    },
+    []
+  );
+
+  // Recalcula quando chegam novas mensagens
+  useEffect(() => {
+    handleScrollCheck();
+  }, [messages.length, handleScrollCheck]);
+
+  // Se o scroll estiver acontecendo no body, ainda assim atualiza o estado do botao
+  useEffect(() => {
+    const onWindowScroll = () => handleScrollCheck();
+    window.addEventListener('scroll', onWindowScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onWindowScroll);
+  }, [handleScrollCheck]);
+
+  // Observa o fim da lista: se o marcador sair da viewport do container, mostra o botao
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    const endEl = messagesEndRef.current;
+    if (!container || !endEl) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowScrollToBottom(!entry.isIntersecting);
+      },
+      { root: container ?? null, threshold: 0.01 }
+    );
+
+    observer.observe(endEl);
+
+    return () => observer.disconnect();
+  }, [messages.length]);
 
   // Buscar conversa + contato + tag
   useEffect(() => {
@@ -60,7 +152,8 @@ export const Chat: React.FC = () => {
             id,
             text,
             sent_at,
-            direction
+            direction,
+            type
           ),
           conversation_tags (
             tags (
@@ -84,7 +177,6 @@ export const Chat: React.FC = () => {
         return;
       }
 
-      // mensagens da conversa (para lastMessage / lastTimestamp)
       const messagesRows =
         (data.messages as {
           id: string;
@@ -95,13 +187,11 @@ export const Chat: React.FC = () => {
 
       const last = messagesRows[messagesRows.length - 1];
 
-      // contatos: pode vir objeto ou array
       const rawContacts: any = data.contacts;
       const contactRow = Array.isArray(rawContacts)
         ? rawContacts[0]
         : rawContacts;
 
-      // tags: pode vir objeto ou array
       const rawTags: any = data.conversation_tags?.[0]?.tags;
       let tagName: string | undefined;
       if (Array.isArray(rawTags)) {
@@ -118,6 +208,7 @@ export const Chat: React.FC = () => {
           contactRow?.name ?? contactRow?.phone ?? 'Contato sem nome',
         contactNumber: contactRow?.phone ?? '',
         lastMessage: last?.text ?? '',
+        lastMessageType: (last as any)?.type ?? 'text',
         lastTimestamp:
           last?.sent_at ?? data.last_message_at ?? new Date().toISOString(),
         unreadCount: 0,
@@ -132,99 +223,13 @@ export const Chat: React.FC = () => {
     fetchConversation();
   }, [id]);
 
-  // Buscar todas as mensagens da conversa (carregamento inicial)
-  useEffect(() => {
-    if (!id) return;
-
-    const fetchMessages = async () => {
-      setLoadingMessages(true);
-
-      const { data, error } = await supabase
-        .from('messages')
-        .select(
-          `
-          id,
-          conversation_id,
-          text,
-          sent_at,
-          created_at,
-          direction
-        `
-        )
-        .eq('conversation_id', id)
-        .order('sent_at', { ascending: true });
-
-      if (error) {
-        console.error('Erro ao buscar mensagens:', error);
-        setLoadingMessages(false);
-        return;
-      }
-
-      const mapped: Message[] =
-        data?.map((row: any) => ({
-          id: row.id,
-          conversationId: row.conversation_id,
-          author: row.direction === 'inbound' ? 'cliente' : 'atendente',
-          text: row.text ?? '',
-          createdAt: row.sent_at ?? row.created_at ?? new Date().toISOString(),
-        })) ?? [];
-
-      setMessages(mapped);
-      setLoadingMessages(false);
-    };
-
-    fetchMessages();
-  }, [id]);
-
-  // Realtime: ouvir novas mensagens inseridas na conversa
-  useEffect(() => {
-    if (!id) return;
-
-    const channel = supabase
-      .channel(`realtime:messages:${id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${id}`,
-        },
-        (payload) => {
-          const row: any = payload.new;
-
-          const newMessage: Message = {
-            id: row.id,
-            conversationId: row.conversation_id,
-            author: row.direction === 'inbound' ? 'cliente' : 'atendente',
-            text: row.text ?? '',
-            createdAt:
-              row.sent_at ?? row.created_at ?? new Date().toISOString(),
-          };
-
-          // evita duplicar caso já exista
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMessage.id)) return prev;
-            return [...prev, newMessage];
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [id]);
-
-  // Enviar mensagem: grava no Supabase e (depois) backend chama Meta
-  // Enviar mensagem: chama Edge Function que grava no Supabase e envia para Meta
+  // Enviar mensagem
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !id) return;
 
     const trimmed = text.trim();
     const tempId = `local-${Date.now()}`;
 
-    // 1) Mensagem otimista na UI
     const optimisticMessage: Message = {
       id: tempId,
       conversationId: id,
@@ -235,7 +240,6 @@ export const Chat: React.FC = () => {
 
     setMessages((prev) => [...prev, optimisticMessage]);
 
-    // 2) Chamar Edge Function send-whatsapp-message
     const { data, error } = await supabase.functions.invoke(
       'send-whatsapp-message',
       {
@@ -248,27 +252,24 @@ export const Chat: React.FC = () => {
 
     if (error) {
       console.error('Erro ao enviar mensagem para WhatsApp:', error);
-      // rollback simples
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       return;
     }
 
     const inserted = (data as any)?.message;
     if (inserted) {
-      const persisted: Message = {
-        id: inserted.id,
-        conversationId: inserted.conversation_id,
-        author: 'atendente',
-        text: inserted.text ?? '',
-        createdAt:
-          inserted.sent_at ?? inserted.created_at ?? new Date().toISOString(),
-      };
+      const persisted: Message = mapDbMessage(inserted);
 
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? persisted : m)));
+      setMessages((prev) => {
+        const withoutTemp = prev.filter((m) => m.id !== tempId);
+        const alreadyExists = withoutTemp.some((m) => m.id === persisted.id);
+        if (alreadyExists) return withoutTemp;
+        return [...withoutTemp, persisted];
+      });
     }
 
-    // 👉 O Realtime também vai disparar pelo INSERT em messages.
-    // Como você já tem o check "se já existe id, não adiciona", não duplica.
+    // Depois de enviar, rola pro fim suave
+    scrollToBottom('smooth');
   };
 
   if (loadingConversation) {
@@ -284,7 +285,7 @@ export const Chat: React.FC = () => {
       <div className="flex items-center justify-center h-screen w-full bg-white">
         <div className="text-center">
           <h3 className="text-lg font-medium text-[#1E1E1E] mb-2">
-            Conversa não encontrada
+            Conversa nao encontrada
           </h3>
           <Button variant="primary" onClick={() => navigate('/inbox')}>
             Voltar para Conversas
@@ -295,14 +296,18 @@ export const Chat: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-full bg-white">
+    <div className="flex flex-col h-full min-h-screen w-full bg-white">
       <ChatHeader
         conversation={conversation}
         onBack={() => navigate('/inbox')}
       />
 
-      {/* Área de Mensagens */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Area de Mensagens */}
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleScrollCheck}
+        className="flex-1 min-h-0 overflow-y-auto p-4 pt-24 pb-36 space-y-4"
+      >
         {loadingMessages ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">Carregando mensagens...</p>
@@ -316,11 +321,19 @@ export const Chat: React.FC = () => {
             {messages.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
-
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
+
+        <button
+          type="button"
+          onClick={() => scrollToBottom('smooth')}
+          className="fixed left-1/2 -translate-x-1/2 bottom-28 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[#0A84FF] text-white shadow-lg transition-colors hover:bg-[#0066d6]"
+          aria-label="Ir para ultima mensagem"
+        >
+          <ArrowDownIcon className="w-5 h-5" />
+        </button>
 
       <MessageInput onSend={handleSendMessage} />
     </div>
