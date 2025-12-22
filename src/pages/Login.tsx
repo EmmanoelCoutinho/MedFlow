@@ -4,6 +4,7 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
+import logo from '../assets/logo-unxet.png';
 
 export const Login: React.FC = () => {
   const { signInWithEmail, loading, user } = useAuth();
@@ -32,7 +33,11 @@ export const Login: React.FC = () => {
     <div className="min-h-screen w-full bg-white flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-[#0A84FF] mb-2">MedFlow</h1>
+          <img
+            src={logo}
+            alt="Unxet"
+            className="mx-auto w-56 mb-2 object-contain"
+          />
           <p className="text-[#1E1E1E] text-lg">Central de Mensagens</p>
         </div>
         <h2 className="text-2xl font-semibold text-[#1E1E1E] mb-6">Entrar</h2>

@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import logo from '../../assets/logo-unxet.png';
 
 type HeaderProps = {
   userName: string;
@@ -43,7 +44,7 @@ export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
       <div className="mx-auto max-w-7xl px-4 h-full flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/inbox" className="flex items-center gap-2 select-none">
-            <div className="text-2xl font-bold text-[#0A84FF]">MedFlow</div>
+            <img src={logo} alt="Unxet logo" className="w-36" />
           </Link>
         </div>
         <div className="relative">
@@ -53,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
             className="w-9 h-9 rounded-full bg-[#0A84FF] text-white flex items-center justify-center font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0A84FF]"
             aria-haspopup="menu"
             aria-expanded={open}
-            aria-label="Abrir menu do usuário"
+            aria-label="Abrir menu do usuÃ¡rio"
           >
             {initials}
           </button>
@@ -81,7 +82,7 @@ export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
                   className="w-full text-left px-4 py-2 text-sm hover:bg-[#F3F4F6]"
                   onClick={() => setOpen(false)}
                 >
-                  Configurações
+                  ConfiguraÃ§Ãµes
                 </button>
                 <div className="my-1 h-px bg-[#E5E7EB]" />
                 <button
@@ -98,3 +99,5 @@ export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
     </header>
   );
 };
+
+

@@ -19,11 +19,46 @@ type DbMessage = {
   payload?: any;
 };
 
+const LAST_OPENED_STORAGE_KEY = 'conversation-last-opened';
+
+const readLastOpenedAt = (): Record<string, number> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(LAST_OPENED_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeLastOpenedAt = (map: Record<string, number>) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(LAST_OPENED_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore write errors (ex: storage disabled)
+  }
+};
+
+export const persistConversationOpenedAt = (
+  conversationId: string,
+  timestamp = Date.now()
+) => {
+  const current = readLastOpenedAt();
+  const next = { ...current, [conversationId]: timestamp };
+  writeLastOpenedAt(next);
+  return next;
+};
+
 export function useConversations(options: UseConversationsOptions = {}) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<any>(null);
-  const [lastOpenedAt, setLastOpenedAt] = useState<Record<string, number>>({});
+  const [lastOpenedAt, setLastOpenedAt] = useState<Record<string, number>>(
+    () => readLastOpenedAt()
+  );
 
   const parsePayload = (raw: any) => {
     if (!raw) return {};
@@ -298,7 +333,11 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
   const markAsRead = useCallback((conversationId: string) => {
     const now = Date.now();
-    setLastOpenedAt((current) => ({ ...current, [conversationId]: now }));
+    setLastOpenedAt((current) => {
+      const next = { ...current, [conversationId]: now };
+      writeLastOpenedAt(next);
+      return next;
+    });
     setConversations((current) =>
       current.map((c) =>
         c.id === conversationId ? { ...c, unreadCount: 0 } : c

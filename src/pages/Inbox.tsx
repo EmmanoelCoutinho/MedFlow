@@ -56,9 +56,9 @@ export const Inbox: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full w-full bg-white overflow-hidden">
+    <div className="flex min-h-screen w-full bg-white overflow-hidden">
       {/* Sidebar */}
-      <div className="w-96 border-r flex flex-col">
+      <div className="w-96 border-r flex flex-col h-full">
         <div className="p-4 border-b">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Conversas</h2>
@@ -118,7 +118,7 @@ export const Inbox: React.FC = () => {
         </div>
 
         {/* Novo chat */}
-        <div className="p-4 border-t">
+        {/* <div className="p-4 border-t">
           <div className="flex gap-2">
             <Input
               placeholder="Número para iniciar..."
@@ -130,7 +130,7 @@ export const Inbox: React.FC = () => {
               <PhoneIcon className="w-4 h-4" />
             </Button>
           </div>
-        </div>
+        </div> */}
       </div>
 
       {/* painel vazio */}

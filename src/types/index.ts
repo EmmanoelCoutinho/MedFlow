@@ -30,6 +30,8 @@ export type Message = {
   mediaUrl?: string;
   image_url?: string;
   mediaMimeType?: string;
+  filename?: string;
+  fileSize?: number;
   payload?: any;
   caption?: string;
   createdAt: string;

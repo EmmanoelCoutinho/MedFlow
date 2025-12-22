@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useState } from "react";
-import type { Message as UiMessage } from "../types";
-import { supabase } from "../lib/supabaseClient";
+import { useCallback, useEffect, useState } from 'react';
+import type { Message as UiMessage } from '../types';
+import { supabase } from '../lib/supabaseClient';
 
 type DbMessage = {
   id: string;
   conversation_id: string;
-  direction?: "inbound" | "outbound" | string | null;
+  direction?: 'inbound' | 'outbound' | string | null;
   text?: string | null;
   sent_at?: string | null;
   created_at?: string | null;
@@ -18,10 +18,11 @@ type DbMessage = {
   image_url?: string | null;
   media_mime_type?: string | null;
   caption?: string | null;
+  filename?: string | null;
 };
 
 const safeParsePayload = (raw: any) => {
-  if (typeof raw === "string") {
+  if (typeof raw === 'string') {
     try {
       return JSON.parse(raw);
     } catch {
@@ -52,11 +53,12 @@ const getMediaData = (payload: any) => {
 
   for (const candidate of candidates) {
     if (!candidate) continue;
-    if (candidate.image) return { type: "image", data: candidate.image };
-    if (candidate.audio) return { type: "audio", data: candidate.audio };
-    if (candidate.sticker) return { type: "sticker", data: candidate.sticker };
-    if (candidate.video) return { type: "video", data: candidate.video };
-    if (candidate.document) return { type: "document", data: candidate.document };
+    if (candidate.image) return { type: 'image', data: candidate.image };
+    if (candidate.audio) return { type: 'audio', data: candidate.audio };
+    if (candidate.sticker) return { type: 'sticker', data: candidate.sticker };
+    if (candidate.video) return { type: 'video', data: candidate.video };
+    if (candidate.document)
+      return { type: 'document', data: candidate.document };
   }
   return { type: undefined, data: undefined };
 };
@@ -65,49 +67,66 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
   const payload = safeParsePayload(row?.payload);
   const mediaInfo = getMediaData(payload);
 
-  const type = row?.type ?? payload?.type ?? mediaInfo.type;
+  const type = row?.type ?? mediaInfo.type ?? (payload as any)?.type;
 
-  // 👇 waMessage é a estruturinha da Meta (messages[0])
+  // Estrutura da Meta (messages[0])
   const waMessage = Array.isArray(payload?.messages)
     ? payload.messages[0]
     : undefined;
 
-  // 👇 PRIORIDADE: URL do Storage (image_url / media_url).
-  // Só se não tiver, usa o url do payload (lookaside da Meta).
+  // PRIORIDADE: URL do Storage (image_url / media_url).
+  // Só se não tiver, usa a url bruta da Meta (lookaside).
   const mediaUrl =
     row.image_url ??
     row.media_url ??
-    mediaInfo.data?.url ?? // imagem, áudio, vídeo, doc da Meta costumam usar "url"
+    mediaInfo.data?.url ??
+    waMessage?.image?.url ??
+    waMessage?.audio?.url ??
+    waMessage?.video?.url ??
+    waMessage?.document?.url ??
     undefined;
 
-  // Mime type também pode vir do banco, se existir
   const mediaMimeType =
-    row.media_mime_type ??
-    mediaInfo.data?.mime_type ??
-    undefined;
+    row.media_mime_type ?? mediaInfo.data?.mime_type ?? undefined;
 
   const caption =
     waMessage?.image?.caption ??
     waMessage?.document?.caption ??
-    mediaInfo.data?.caption ??
+    (mediaInfo.data as any)?.caption ??
     row?.caption ??
     null;
 
-  console.log("🧩 mapDbMessage row:", row);
-  console.log("🧩 mediaInfo:", mediaInfo);
-  console.log("🧩 mediaUrl final:", mediaUrl);
+  const filename =
+    row.filename ?? // ✅ PRIORIDADE: vem do seu DB (principal p/ outbound)
+    waMessage?.document?.filename ??
+    (mediaInfo.data as any)?.filename ??
+    (mediaInfo.data as any)?.name ??
+    (payload as any)?.document?.filename ??
+    undefined;
 
-  return {
+  const fileSize =
+    waMessage?.document?.file_size ??
+    (mediaInfo.data as any)?.file_size ??
+    (payload as any)?.document?.file_size ??
+    undefined;
+
+  const mapped: UiMessage = {
     id: row.id,
     conversationId: row.conversation_id,
-    author: row.direction === "inbound" ? "cliente" : "atendente",
-    text: row.text ?? caption ?? "",
+    author: row.direction === 'inbound' ? 'cliente' : 'atendente',
+    text: row.text ?? caption ?? '',
     type,
     mediaUrl: mediaUrl ?? undefined,
     mediaMimeType: mediaMimeType ?? undefined,
+    filename: filename ?? undefined,
+    fileSize: fileSize ?? undefined,
     payload,
     createdAt: row.sent_at ?? row.created_at ?? new Date().toISOString(),
   };
+
+  console.log('[mapDbMessage]', { row, mapped });
+
+  return mapped;
 };
 
 export function useMessages(conversationId: string | null) {
@@ -126,22 +145,32 @@ export function useMessages(conversationId: string | null) {
     setError(null);
 
     const { data, error } = await supabase
-      .from("messages")
+      .from('messages')
       .select(
-        // 👇 garante que image_url venha no row
-        "id, conversation_id, direction, text, sent_at, created_at, sender, type, payload, image_url"
+        `
+          id,
+          conversation_id,
+          direction,
+          text,
+          sent_at,
+          created_at,
+          sender,
+          type,
+          payload,
+          image_url,
+          media_url,
+          media_mime_type,
+          filename
+        `
       )
-      .eq("conversation_id", conversationId)
-      .order("sent_at", { ascending: true });
+      .eq('conversation_id', conversationId)
+      .order('sent_at', { ascending: true });
 
     if (error) {
       setError(error);
       setLoading(false);
       return;
     }
-
-    console.log('daaataaaaaa',data);
-    
 
     const mapped = (data ?? []).map((row) => mapDbMessage(row as DbMessage));
 
@@ -159,11 +188,11 @@ export function useMessages(conversationId: string | null) {
     const channel = supabase
       .channel(`conversation-${conversationId}`)
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {

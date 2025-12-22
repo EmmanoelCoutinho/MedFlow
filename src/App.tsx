@@ -16,7 +16,7 @@ function RoutedApp() {
       <main
         className={
           showHeader
-            ? 'pt-16 h-[calc(100vh-64px)] overflow-hidden'
+            ? 'pt-16 h-screen box-border overflow-hidden'
             : 'min-h-screen'
         }
       >

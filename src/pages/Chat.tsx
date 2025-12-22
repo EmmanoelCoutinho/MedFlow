@@ -1,22 +1,39 @@
 ﻿// src/pages/Chat.tsx
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useRef,
+  useCallback,
+} from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import type { Conversation, Message, Channel, Tag } from '../types';
 import { useMessages, mapDbMessage } from '../hooks/useMessages';
+import { persistConversationOpenedAt } from '../hooks/useConversations';
 import { Button } from '../components/ui/Button';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageInput } from '../components/chat/MessageInput';
 import { ArrowDownIcon } from 'lucide-react';
 
+type SendableInput =
+  | string
+  | {
+      type: 'text' | 'image' | 'audio' | 'document';
+      text?: string;
+      mediaUrl?: string;
+      mediaMimeType?: string;
+      filename?: string;
+      fileSize?: number;
+    };
+
 export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const initialScrollDone = useRef(false);
+  const justOpenedRef = useRef(true);
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -28,103 +45,146 @@ export const Chat: React.FC = () => {
     setMessages,
   } = useMessages(id ?? null);
 
-  // Sempre que trocar de conversa, resetamos o controle do scroll inicial
+  // Quando trocar de conversa, resetar estado de scroll
   useEffect(() => {
-    initialScrollDone.current = false;
-    setMessages([]);
     setShowScrollToBottom(false);
+    justOpenedRef.current = true;
   }, [id]);
 
-  // Sempre vai pro fim de verdade do container
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+  // ===== FUNÇÕES AUXILIARES DE MÉTRICA =====
+  const getContainerMetrics = () => {
     const container = messagesContainerRef.current;
-    const endEl = messagesEndRef.current;
+    if (!container) return null;
 
-    if (endEl) {
-      endEl.scrollIntoView({ behavior, block: 'end' });
-    }
+    const fullHeight = container.scrollHeight;
+    const visibleHeight = container.clientHeight;
+    const currentScrollTop = container.scrollTop;
+    const scrollable = fullHeight > visibleHeight + 5;
 
-    if (container) {
-      const top = container.scrollHeight;
+    return {
+      context: 'container' as const,
+      el: container,
+      fullHeight,
+      visibleHeight,
+      currentScrollTop,
+      scrollable,
+    };
+  };
 
-      if (behavior === 'smooth') {
-        container.scrollTo({
-          top,
-          behavior: 'smooth',
-        });
-      } else {
-        container.scrollTop = top;
-      }
+  const getWindowMetrics = () => {
+    const doc = document.documentElement;
+    const fullHeight = doc.scrollHeight;
+    const visibleHeight = window.innerHeight;
+    const currentScrollTop = window.scrollY || doc.scrollTop || 0;
+    const scrollable = fullHeight > visibleHeight + 5;
+
+    return {
+      context: 'window' as const,
+      fullHeight,
+      visibleHeight,
+      currentScrollTop,
+      scrollable,
+    };
+  };
+
+  // ===== SCROLL PRO FINAL (CONTAINER OU WINDOW) =====
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const containerMetrics = getContainerMetrics();
+    const windowMetrics = getWindowMetrics();
+
+    const useContainer =
+      containerMetrics && containerMetrics.scrollable ? true : false;
+    const useWindow = !useContainer && windowMetrics.scrollable ? true : false;
+
+    if (useContainer && containerMetrics) {
+      const { el, fullHeight, visibleHeight } = containerMetrics;
+      const maxScrollTop = fullHeight - visibleHeight;
+      const target = maxScrollTop > 0 ? maxScrollTop : 0;
+
+      el.scrollTo({
+        top: target,
+        behavior,
+      });
+    } else if (useWindow && windowMetrics) {
+      const { fullHeight, visibleHeight } = windowMetrics;
+      const maxScrollTop = fullHeight - visibleHeight;
+      const target = maxScrollTop > 0 ? maxScrollTop : 0;
+
+      window.scrollTo({
+        top: target,
+        behavior,
+      });
     }
 
     setShowScrollToBottom(false);
   }, []);
 
-  // Ao carregar as mensagens da conversa, sempre abrir no fim
-  useEffect(() => {
+  // ===== SEMPRE ABRIR A CONVERSA NO FINAL =====
+  useLayoutEffect(() => {
     if (loadingMessages) return;
     if (!messages.length) return;
-    if (initialScrollDone.current) return;
 
-    initialScrollDone.current = true;
+    // só auto-scroll na abertura da conversa
+    if (!justOpenedRef.current) return;
 
-    // roda apos layout
+    // marca que já tratamos essa abertura
+    justOpenedRef.current = false;
+
+    // 1ª tentativa logo após o layout
     scrollToBottom('auto');
-    const timer = setTimeout(() => scrollToBottom('auto'), 0);
-    return () => clearTimeout(timer);
+
+    // 2ª tentativa na próxima tick (caso a página ainda cresça)
+    setTimeout(() => {
+      scrollToBottom('auto');
+    }, 0);
+
+    // 3ª tentativa com um pequeno delay (ex: quando o realtime entra logo depois)
+    setTimeout(() => {
+      scrollToBottom('auto');
+    }, 100);
   }, [loadingMessages, messages.length, scrollToBottom]);
 
-  // Checa se deve mostrar o botao "ir para o fim"
-  const handleScrollCheck = useCallback(
-    (e?: React.UIEvent<HTMLDivElement>) => {
-      const container =
-        (e?.currentTarget as HTMLDivElement | null) ?? messagesContainerRef.current;
+  // ===== VER QUANDO MOSTRAR O BOTÃO "IR PRO FIM" =====
+  const handleScrollCheck = useCallback(() => {
+    const containerMetrics = getContainerMetrics();
+    const windowMetrics = getWindowMetrics();
 
-      if (container) {
-        const distanceToBottom =
-          container.scrollHeight - (container.scrollTop + container.clientHeight);
-        setShowScrollToBottom(distanceToBottom > 120);
-        return;
-      }
+    const useContainer =
+      containerMetrics && containerMetrics.scrollable ? true : false;
+    const useWindow = !useContainer && windowMetrics.scrollable ? true : false;
 
-      // fallback: se estiver rolando a pagina (body)
-      const doc = document.documentElement;
-      const distanceToBottom =
-        doc.scrollHeight - (window.scrollY + window.innerHeight);
-      setShowScrollToBottom(distanceToBottom > 120);
-    },
-    []
-  );
+    if (useContainer && containerMetrics) {
+      const { fullHeight, visibleHeight, currentScrollTop } = containerMetrics;
+      const distanceToBottom = fullHeight - (currentScrollTop + visibleHeight);
+
+      setShowScrollToBottom(distanceToBottom > 40);
+    } else if (useWindow && windowMetrics) {
+      const { fullHeight, visibleHeight, currentScrollTop } = windowMetrics;
+      const distanceToBottom = fullHeight - (currentScrollTop + visibleHeight);
+
+      setShowScrollToBottom(distanceToBottom > 40);
+    } else {
+      setShowScrollToBottom(false);
+    }
+  }, []);
 
   // Recalcula quando chegam novas mensagens
   useEffect(() => {
     handleScrollCheck();
   }, [messages.length, handleScrollCheck]);
 
-  // Se o scroll estiver acontecendo no body, ainda assim atualiza o estado do botao
+  // Sempre joga o usuario para a ultima mensagem quando chegar/enviar nova
+  useEffect(() => {
+    if (loadingMessages || messages.length === 0) return;
+    scrollToBottom('auto');
+  }, [loadingMessages, messages.length, scrollToBottom]);
+
+  // Também atualiza estado ao rolar a página inteira
   useEffect(() => {
     const onWindowScroll = () => handleScrollCheck();
     window.addEventListener('scroll', onWindowScroll, { passive: true });
     return () => window.removeEventListener('scroll', onWindowScroll);
   }, [handleScrollCheck]);
-
-  // Observa o fim da lista: se o marcador sair da viewport do container, mostra o botao
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    const endEl = messagesEndRef.current;
-    if (!container || !endEl) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setShowScrollToBottom(!entry.isIntersecting);
-      },
-      { root: container ?? null, threshold: 0.01 }
-    );
-
-    observer.observe(endEl);
-
-    return () => observer.disconnect();
-  }, [messages.length]);
 
   // Buscar conversa + contato + tag
   useEffect(() => {
@@ -183,6 +243,7 @@ export const Chat: React.FC = () => {
           text: string | null;
           sent_at: string | null;
           direction: string | null;
+          type?: string | null;
         }[]) ?? [];
 
       const last = messagesRows[messagesRows.length - 1];
@@ -223,29 +284,82 @@ export const Chat: React.FC = () => {
     fetchConversation();
   }, [id]);
 
-  // Enviar mensagem
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim() || !id) return;
+  // Marca conversa como lida sempre que houver mensagens (incluindo novas em tempo real)
+  useEffect(() => {
+    if (!id || loadingMessages || messages.length === 0) return;
 
-    const trimmed = text.trim();
+    const lastMessage = messages[messages.length - 1];
+    const ts = lastMessage?.createdAt
+      ? new Date(lastMessage.createdAt).getTime()
+      : Date.now();
+
+    persistConversationOpenedAt(id, ts || Date.now());
+  }, [id, messages, loadingMessages]);
+
+  // ===== Enviar mensagem (texto / imagem / áudio) =====
+  // Enviar mensagem (texto / imagem / áudio)
+  const handleSendMessage = async (input: SendableInput) => {
+    if (!id) return;
+
+    let bodyText = '';
+    let outboundType: 'text' | 'image' | 'audio' | 'document' = 'text';
+    let mediaUrl: string | undefined;
+    let mediaMimeType: string | undefined;
+    let filename: string | undefined;
+    let fileSize: number | undefined;
+    
+    if (typeof input === 'string') {
+      bodyText = input.trim();
+      outboundType = 'text';
+    } else {
+      outboundType = input.type;
+      bodyText = (input.text ?? '').trim();
+      mediaUrl = input.mediaUrl;
+      mediaMimeType = input.mediaMimeType;
+      filename = input.filename;
+      fileSize = input.fileSize;
+    }
+
+    if (!bodyText && !mediaUrl) return;
+
     const tempId = `local-${Date.now()}`;
 
-    const optimisticMessage: Message = {
+    const optimistic: Message = {
       id: tempId,
       conversationId: id,
       author: 'atendente',
-      text: trimmed,
+      text:
+        bodyText ||
+        (outboundType === 'image'
+          ? '🖼️ Imagem'
+          : outboundType === 'audio'
+          ? '🎧 Áudio'
+          : outboundType === 'document'
+          ? '📄 Documento'
+          : ''),
       createdAt: new Date().toISOString(),
+      type: outboundType,
+      mediaUrl,
+      mediaMimeType,
+      filename,
+      fileSize,
     };
 
-    setMessages((prev) => [...prev, optimisticMessage]);
+    setMessages((prev) => [...prev, optimistic]);
+
+    // já rola pro fim ao enviar
+    scrollToBottom('smooth');
 
     const { data, error } = await supabase.functions.invoke(
       'send-whatsapp-message',
       {
         body: {
           conversationId: id,
-          text: trimmed,
+          text: bodyText,
+          type: outboundType,
+          mediaUrl,
+          mediaMimeType,
+          filename,
         },
       }
     );
@@ -259,17 +373,23 @@ export const Chat: React.FC = () => {
     const inserted = (data as any)?.message;
     if (inserted) {
       const persisted: Message = mapDbMessage(inserted);
+      const merged: Message = {
+        ...persisted,
+        filename: persisted.filename ?? optimistic.filename,
+        fileSize: persisted.fileSize ?? optimistic.fileSize,
+        mediaUrl: persisted.mediaUrl ?? optimistic.mediaUrl,
+        mediaMimeType: persisted.mediaMimeType ?? optimistic.mediaMimeType,
+      };
 
       setMessages((prev) => {
         const withoutTemp = prev.filter((m) => m.id !== tempId);
-        const alreadyExists = withoutTemp.some((m) => m.id === persisted.id);
+        const alreadyExists = withoutTemp.some((m) => m.id === merged.id);
         if (alreadyExists) return withoutTemp;
-        return [...withoutTemp, persisted];
+        return [...withoutTemp, merged];
       });
-    }
 
-    // Depois de enviar, rola pro fim suave
-    scrollToBottom('smooth');
+      scrollToBottom('smooth');
+    }
   };
 
   if (loadingConversation) {
@@ -302,11 +422,11 @@ export const Chat: React.FC = () => {
         onBack={() => navigate('/inbox')}
       />
 
-      {/* Area de Mensagens */}
+      {/* Área de Mensagens */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScrollCheck}
-        className="flex-1 min-h-0 overflow-y-auto p-4 pt-24 pb-36 space-y-4"
+        className="flex-1 min-h-0 overflow-y-auto p-4 pt-24 pb-28 space-y-4"
       >
         {loadingMessages ? (
           <div className="flex items-center justify-center h-full">
@@ -319,13 +439,18 @@ export const Chat: React.FC = () => {
         ) : (
           <>
             {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
+              <MessageBubble
+                key={message.id}
+                message={message}
+                contactName={conversation.contactName}
+              />
             ))}
-            <div ref={messagesEndRef} />
           </>
         )}
       </div>
 
+      {/* Botão flutuante pra ir pro fim */}
+      {showScrollToBottom && (
         <button
           type="button"
           onClick={() => scrollToBottom('smooth')}
@@ -334,7 +459,9 @@ export const Chat: React.FC = () => {
         >
           <ArrowDownIcon className="w-5 h-5" />
         </button>
+      )}
 
+      {/* IMPORTANTE: o MessageInput agora pode enviar string OU objeto */}
       <MessageInput onSend={handleSendMessage} />
     </div>
   );
