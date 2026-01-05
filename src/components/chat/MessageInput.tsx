@@ -274,16 +274,25 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSend }) => {
   };
 
   // Upload genérico para Supabase (imagem / audio)
-  const uploadFileToSupabase = async (file: File, kind: 'image' | 'audio' | 'document') => {
+  const uploadFileToSupabase = async (
+    file: File,
+    kind: 'image' | 'audio' | 'document'
+  ) => {
     const extFromName = file.name.split('.').pop();
-    const defaultExt = kind === 'image' ? 'jpg' : 'bin';
+    const defaultExt =
+      kind === 'image' ? 'jpg' : kind === 'audio' ? 'mp3' : 'bin';
 
     const fileExt = (extFromName || defaultExt).toLowerCase();
     const fileName = `${Date.now()}-${Math.random()
       .toString(36)
       .slice(2)}.${fileExt}`;
 
-    const folder = kind === 'image' ? 'outbound-images' : 'outbound-audios';
+    const folder =
+      kind === 'image'
+        ? 'outbound-images'
+        : kind === 'audio'
+        ? 'outbound-audios'
+        : 'outbound-documents';
     const filePath = `${folder}/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
@@ -293,7 +302,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSend }) => {
         upsert: false,
         contentType:
           file.type ||
-          (kind === 'image' ? 'image/jpeg' : 'application/octet-stream'),
+          (kind === 'image'
+            ? 'image/jpeg'
+            : kind === 'audio'
+            ? 'audio/mpeg'
+            : 'application/octet-stream'),
       });
 
     if (uploadError) {

@@ -372,6 +372,20 @@ export const Chat: React.FC = () => {
 
     const inserted = (data as any)?.message;
     if (inserted) {
+      if (outboundType === 'document' && filename && inserted.id) {
+        const { error: filenameError } = await supabase
+          .from('messages')
+          .update({ filename })
+          .eq('id', inserted.id);
+
+        if (filenameError) {
+          console.warn(
+            'Não foi possível persistir o nome do documento:',
+            filenameError
+          );
+        }
+      }
+
       const persisted: Message = mapDbMessage(inserted);
       const merged: Message = {
         ...persisted,
