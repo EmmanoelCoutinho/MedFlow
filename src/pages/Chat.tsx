@@ -408,7 +408,7 @@ export const Chat: React.FC = () => {
 
   if (loadingConversation) {
     return (
-      <div className="flex items-center justify-center h-screen w-full bg-white">
+      <div className="flex items-center justify-center h-full w-full bg-white">
         <p className="text-gray-500">Carregando conversa...</p>
       </div>
     );
@@ -416,7 +416,7 @@ export const Chat: React.FC = () => {
 
   if (!conversation) {
     return (
-      <div className="flex items-center justify-center h-screen w-full bg-white">
+      <div className="flex items-center justify-center h-full w-full bg-white">
         <div className="text-center">
           <h3 className="text-lg font-medium text-[#1E1E1E] mb-2">
             Conversa nao encontrada
@@ -430,7 +430,7 @@ export const Chat: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-full min-h-screen w-full bg-white">
+    <div className="flex flex-col h-full min-h-0 w-full bg-white relative">
       <ChatHeader
         conversation={conversation}
         onBack={() => navigate('/inbox')}
@@ -440,7 +440,7 @@ export const Chat: React.FC = () => {
       <div
         ref={messagesContainerRef}
         onScroll={handleScrollCheck}
-        className="flex-1 min-h-0 overflow-y-auto p-4 pt-24 pb-28 space-y-4"
+        className="flex-1 min-h-0 overflow-y-auto p-4 pb-28 space-y-4"
       >
         {loadingMessages ? (
           <div className="flex items-center justify-center h-full">
@@ -468,7 +468,7 @@ export const Chat: React.FC = () => {
         <button
           type="button"
           onClick={() => scrollToBottom('smooth')}
-          className="fixed left-1/2 -translate-x-1/2 bottom-28 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[#0A84FF] text-white shadow-lg transition-colors hover:bg-[#0066d6]"
+          className="absolute left-1/2 -translate-x-1/2 bottom-28 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[#0A84FF] text-white shadow-lg transition-colors hover:bg-[#0066d6]"
           aria-label="Ir para ultima mensagem"
         >
           <ArrowDownIcon className="w-5 h-5" />
