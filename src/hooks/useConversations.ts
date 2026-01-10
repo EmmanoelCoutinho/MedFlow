@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import type { Conversation, Channel, Tag } from '../types';
 
@@ -59,6 +59,11 @@ export function useConversations(options: UseConversationsOptions = {}) {
   const [lastOpenedAt, setLastOpenedAt] = useState<Record<string, number>>(
     () => readLastOpenedAt()
   );
+  const lastOpenedAtRef = useRef(lastOpenedAt);
+
+  useEffect(() => {
+    lastOpenedAtRef.current = lastOpenedAt;
+  }, [lastOpenedAt]);
 
   const parsePayload = (raw: any) => {
     if (!raw) return {};
@@ -223,7 +228,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
         const lastTime = new Date(
           last?.sent_at ?? row.last_message_at ?? 0
         ).getTime();
-        const openedAt = lastOpenedAt[row.id];
+        const openedAt = lastOpenedAtRef.current[row.id];
         const isUnread =
           last?.direction === 'inbound' &&
           (!openedAt || lastTime > openedAt);
@@ -252,7 +257,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
     setConversations(mapped);
     setLoading(false);
-  }, [options.status, options.channel, lastOpenedAt]);
+  }, [options.status, options.channel]);
 
   // carregamento inicial + quando mudar filtro (status/canal)
   useEffect(() => {
