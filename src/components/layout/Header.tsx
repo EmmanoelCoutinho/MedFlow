@@ -1,11 +1,7 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import logo from '../../assets/logo-unxet.png';
-
-type HeaderProps = {
-  userName: string;
-  userRole?: string;
-};
+import { useAuth } from '../../contexts/AuthContext';
 
 function getInitials(name: string) {
   return name
@@ -17,11 +13,24 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
-export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
-  const initials = useMemo(() => getInitials(userName), [userName]);
+export const Header = () => {
+  const { profile, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const initials = useMemo(() => getInitials(profile?.name || ''), [profile?.name]);
+
   const [open, setOpen] = useState(false);
+
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const handleSingOut = () => {
+    signOut();
+    setOpen(false);
+    setTimeout(() => {
+      navigate("/login");
+    }, 1000)
+  }
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -66,9 +75,11 @@ export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
             >
               <div className="px-4 py-3 bg-[#F9FAFB]">
                 <div className="text-sm text-gray-500">Conta</div>
-                <div className="text-[#1E1E1E] font-medium">{userName}</div>
-                {userRole && (
-                  <div className="text-sm text-gray-600">{userRole}</div>
+                <div className="text-[#1E1E1E] font-medium">
+                  {profile?.name}
+                </div>
+                {profile?.role && (
+                  <div className="text-sm text-gray-600">{profile?.role}</div>
                 )}
               </div>
               <div className="py-1">
@@ -82,12 +93,12 @@ export const Header: React.FC<HeaderProps> = ({ userName, userRole }) => {
                   className="w-full text-left px-4 py-2 text-sm hover:bg-[#F3F4F6]"
                   onClick={() => setOpen(false)}
                 >
-                  ConfiguraÃ§Ãµes
+                  Configurações
                 </button>
                 <div className="my-1 h-px bg-[#E5E7EB]" />
                 <button
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                  onClick={() => setOpen(false)}
+                  onClick={handleSingOut}
                 >
                   Sair
                 </button>

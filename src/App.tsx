@@ -11,7 +11,7 @@ function RoutedApp() {
   return (
     <>
       {showHeader && (
-        <Header userName="Julia Andrade" userRole="Atendente" />
+        <Header />
       )}
       <main
         className={

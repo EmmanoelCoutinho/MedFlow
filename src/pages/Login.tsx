@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import logo from '../assets/logo-unxet.png';
 
 export const Login: React.FC = () => {
-  const { signInWithEmail, loading, user } = useAuth();
+  const { signInWithEmail, loading, authUser } = useAuth();
   const navigate = useNavigate();
 
   const [error] = useState('');
@@ -24,8 +24,8 @@ export const Login: React.FC = () => {
     }
   }
 
-  if (user) {
-    navigate('/inbox');
+  if (authUser) {
+    navigate("/inbox");
     return null;
   }
 

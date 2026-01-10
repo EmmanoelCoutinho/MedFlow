@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BotIcon,
   Building2Icon,
@@ -8,27 +8,30 @@ import {
   MessageSquareTextIcon,
   TagIcon,
   UsersIcon,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { Input } from '../components/ui/Input';
-import { Badge } from '../components/ui/Badge';
-import logo from '../assets/logo-unxet.png';
+import { Input } from "../components/ui/Input";
+import { Badge } from "../components/ui/Badge";
 
-import { ConversationItem } from '../components/inbox/ConversationItem';
-import { ChannelFilter } from '../components/inbox/ChannelFilter';
-import { TagFilter } from '../components/inbox/TagFilter';
+import { ConversationItem } from "../components/inbox/ConversationItem";
+import { ChannelFilter } from "../components/inbox/ChannelFilter";
+import { TagFilter } from "../components/inbox/TagFilter";
 
-import { useConversations } from '../hooks/useConversations';
-import type { Channel, Tag } from '../types';
+import { useConversations } from "../hooks/useConversations";
+import type { Channel, Tag } from "../types";
 
 export const Inbox: React.FC = () => {
   const navigate = useNavigate();
 
-  const { conversations, loading: isLoading, markAsRead } = useConversations({
-    status: 'open',
+  const {
+    conversations,
+    loading: isLoading,
+    markAsRead,
+  } = useConversations({
+    status: "open",
   });
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>([]);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
@@ -57,41 +60,71 @@ export const Inbox: React.FC = () => {
   });
 
   const sidebarItems = [
-    { label: 'Atendimentos', icon: MessageCircleIcon },
-    { label: 'Carteira de contatos', icon: UsersIcon },
-    { label: 'Departamento', icon: Building2Icon },
-    { label: 'Tags', icon: TagIcon },
-    { label: 'Bots', icon: BotIcon },
-    { label: 'Mensagens rápidas', icon: MessageSquareTextIcon },
+    { label: "Atendimentos", icon: MessageCircleIcon },
+    { label: "Carteira de contatos", icon: UsersIcon },
+    { label: "Departamento", icon: Building2Icon },
+    { label: "Tags", icon: TagIcon },
+    { label: "Bots", icon: BotIcon },
+    { label: "Mensagens rápidas", icon: MessageSquareTextIcon },
   ];
 
   return (
     <div className="flex min-h-screen w-full bg-white overflow-hidden">
-      <aside className="w-64 border-r bg-gray-50 flex flex-col">
-        <div className="p-6 border-b">
-          <img src={logo} alt="Logo MedFlow" className="h-10 w-auto" />
+      {/* Sidebar (minimizada por padrão, expande no hover) */}
+      <aside className="group w-16 hover:w-64 transition-all duration-200 border-r bg-gray-50 flex flex-col overflow-hidden flex-shrink-0">
+        <div className="p-4 border-b">
+          <div className="flex items-center gap-3">
+            <img
+              src={'/logo-unxet.png'}
+              alt="Logo Unxet"
+              className="h-9 w-9 rounded-md object-contain"
+            />
+
+            {/* Nome aparece só quando expandir */}
+            <div className="overflow-hidden max-w-0 group-hover:max-w-[200px] transition-all duration-200">
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <p className="text-sm font-semibold text-gray-900 leading-tight">
+                  Unxet
+                </p>
+                <p className="text-xs text-gray-500 leading-tight">
+                  Central de mensagens
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
-        <nav className="flex-1 p-4 space-y-1">
+
+        <nav className="flex-1 p-2 space-y-1">
           {sidebarItems.map((item, index) => {
             const Icon = item.icon;
+            const active = index === 0;
+
             return (
               <button
                 key={item.label}
                 type="button"
-                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  index === 0
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
+                className={[
+                  "w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                  "justify-center group-hover:justify-start",
+                  active
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+                ].join(" ")}
+                title={item.label} // ajuda quando estiver minimizado
               >
-                <Icon className="h-5 w-5" />
-                <span>{item.label}</span>
+                <Icon className="h-5 w-5 flex-shrink-0" />
+
+                {/* Texto some quando minimizado */}
+                <span className="whitespace-nowrap overflow-hidden max-w-0 group-hover:max-w-[220px] opacity-0 group-hover:opacity-100 transition-all duration-200">
+                  {item.label}
+                </span>
               </button>
             );
           })}
         </nav>
       </aside>
-      {/* Sidebar */}
+
+      {/* Sidebar de conversas */}
       <div className="w-96 border-r flex flex-col h-full">
         <div className="p-4 border-b">
           <div className="flex items-center justify-between mb-4">
@@ -150,21 +183,6 @@ export const Inbox: React.FC = () => {
             </div>
           )}
         </div>
-
-        {/* Novo chat */}
-        {/* <div className="p-4 border-t">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Número para iniciar..."
-              value={newChatNumber}
-              onChange={(e) => setNewChatNumber(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleStartChat()}
-            />
-            <Button variant="primary" onClick={handleStartChat}>
-              <PhoneIcon className="w-4 h-4" />
-            </Button>
-          </div>
-        </div> */}
       </div>
 
       {/* painel vazio */}
