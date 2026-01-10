@@ -433,7 +433,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSend }) => {
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-0 border-t border-[#E5E7EB] bg-white p-4 z-30 shadow-sm">
+    <div className="sticky bottom-0 border-t border-[#E5E7EB] bg-white p-4 z-20 shadow-sm">
       {isRecording && (
         <div className="flex items-center gap-2 mb-2 text-sm text-[#1F2937]">
           <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
