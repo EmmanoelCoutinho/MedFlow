@@ -68,7 +68,7 @@ export const Inbox: React.FC = () => {
 
   return (
     <div className="flex min-h-screen w-full bg-white overflow-hidden">
-      <aside className="group w-16 hover:w-64 border-r bg-gray-50 flex flex-col transition-all duration-200 overflow-hidden">
+      <aside className="group w-16 hover:w-64 border-r bg-gray-50 flex flex-col transition-[width] duration-200 overflow-hidden">
         <div className="p-4 border-b flex items-center justify-center group-hover:justify-start">
           <div className="flex items-center gap-3">
             <MenuIcon className="h-5 w-5 text-gray-500" />
@@ -93,7 +93,7 @@ export const Inbox: React.FC = () => {
                 }`}
               >
                 <Icon className="h-5 w-5" />
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                   {item.label}
                 </span>
               </button>
