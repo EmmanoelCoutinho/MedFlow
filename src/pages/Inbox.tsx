@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageSquareIcon, PhoneIcon } from 'lucide-react';
+import {
+  BotIcon,
+  Building2Icon,
+  MessageCircleIcon,
+  MessageSquareIcon,
+  MessageSquareTextIcon,
+  TagIcon,
+  UsersIcon,
+} from 'lucide-react';
 
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
-import { Button } from '../components/ui/Button';
+import logo from '../assets/logo-unxet.png';
 
 import { ConversationItem } from '../components/inbox/ConversationItem';
 import { ChannelFilter } from '../components/inbox/ChannelFilter';
@@ -23,7 +31,6 @@ export const Inbox: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>([]);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
-  const [newChatNumber, setNewChatNumber] = useState('');
 
   // total unread
   const unreadCount = conversations.reduce(
@@ -49,14 +56,41 @@ export const Inbox: React.FC = () => {
     return matchesSearch && matchesChannel && matchesTag;
   });
 
-  const handleStartChat = () => {
-    if (!newChatNumber.trim()) return;
-    navigate(`/chat/new?number=${newChatNumber}`);
-    setNewChatNumber('');
-  };
+  const sidebarItems = [
+    { label: 'Atendimentos', icon: MessageCircleIcon },
+    { label: 'Carteira de contatos', icon: UsersIcon },
+    { label: 'Departamento', icon: Building2Icon },
+    { label: 'Tags', icon: TagIcon },
+    { label: 'Bots', icon: BotIcon },
+    { label: 'Mensagens rápidas', icon: MessageSquareTextIcon },
+  ];
 
   return (
     <div className="flex min-h-screen w-full bg-white overflow-hidden">
+      <aside className="w-64 border-r bg-gray-50 flex flex-col">
+        <div className="p-6 border-b">
+          <img src={logo} alt="Logo MedFlow" className="h-10 w-auto" />
+        </div>
+        <nav className="flex-1 p-4 space-y-1">
+          {sidebarItems.map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  index === 0
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
       {/* Sidebar */}
       <div className="w-96 border-r flex flex-col h-full">
         <div className="p-4 border-b">
