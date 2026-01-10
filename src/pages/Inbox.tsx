@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   BotIcon,
   Building2Icon,
-  MenuIcon,
   MessageCircleIcon,
   MessageSquareIcon,
   MessageSquareTextIcon,
@@ -68,16 +67,9 @@ export const Inbox: React.FC = () => {
 
   return (
     <div className="flex min-h-screen w-full bg-white overflow-hidden">
-      <aside className="group w-16 hover:w-64 border-r bg-gray-50 flex flex-col transition-[width] duration-200 overflow-hidden">
-        <div className="p-4 border-b flex items-center justify-center group-hover:justify-start">
-          <div className="flex items-center gap-3">
-            <MenuIcon className="h-5 w-5 text-gray-500" />
-            <img
-              src={logo}
-              alt="Logo MedFlow"
-              className="h-8 w-auto hidden group-hover:block"
-            />
-          </div>
+      <aside className="w-64 border-r bg-gray-50 flex flex-col">
+        <div className="p-6 border-b">
+          <img src={logo} alt="Logo MedFlow" className="h-10 w-auto" />
         </div>
         <nav className="flex-1 p-4 space-y-1">
           {sidebarItems.map((item, index) => {
@@ -86,16 +78,14 @@ export const Inbox: React.FC = () => {
               <button
                 key={item.label}
                 type="button"
-                className={`w-full flex items-center justify-center group-hover:justify-start gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
                   index === 0
                     ? 'bg-blue-50 text-blue-700'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
                 <Icon className="h-5 w-5" />
-                <span className="opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  {item.label}
-                </span>
+                <span>{item.label}</span>
               </button>
             );
           })}
