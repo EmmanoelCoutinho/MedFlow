@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import {
   BotIcon,
   Building2Icon,
@@ -176,7 +176,7 @@ export const Inbox: React.FC = () => {
                   conversation={conv}
                   onClick={() => {
                     markAsRead(conv.id);
-                    navigate(`/chat/${conv.id}`);
+                    navigate(`/inbox/chat/${conv.id}`);
                   }}
                 />
               ))}
@@ -185,13 +185,8 @@ export const Inbox: React.FC = () => {
         </div>
       </div>
 
-      {/* painel vazio */}
-      <div className="flex-1 flex items-center justify-center text-center">
-        <MessageSquareIcon className="w-16 h-16 text-gray-300 mb-3" />
-        <div>
-          <h3 className="text-lg font-medium">Selecione uma conversa</h3>
-          <p className="text-gray-500">Ou inicie um novo chat</p>
-        </div>
+      <div className="flex-1 min-w-0 flex flex-col min-h-0">
+        <Outlet />
       </div>
     </div>
   );

@@ -4,10 +4,10 @@ import { Inbox } from './pages/Inbox';
 import { Chat } from './pages/Chat';
 import { Header } from './components/layout/Header';
 import { AuthProvider } from './contexts/AuthContext';
+import { InboxEmpty } from './pages/InboxEmpty';
 function RoutedApp() {
   const location = useLocation();
-  const showHeader =
-    location.pathname !== '/login' && !location.pathname.startsWith('/chat');
+  const showHeader = location.pathname !== '/login';
   return (
     <>
       {showHeader && (
@@ -22,8 +22,10 @@ function RoutedApp() {
       >
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/inbox" element={<Inbox />} />
-          <Route path="/chat/:id" element={<Chat />} />
+          <Route path="/inbox" element={<Inbox />}>
+            <Route index element={<InboxEmpty />} />
+            <Route path="chat/:id" element={<Chat />} />
+          </Route>
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
       </main>
