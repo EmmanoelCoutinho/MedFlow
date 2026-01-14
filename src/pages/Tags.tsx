@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { PlusCircleIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { PlusCircleIcon, PencilIcon } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
@@ -29,24 +29,26 @@ const AVAILABLE_COLORS = [
 ];
 
 export const Tags: React.FC = () => {
-  const { profile, loading: authLoading } = useAuth();
-  const clinicId = profile?.clinic_id ?? null;
+  const { profile } = useAuth();
+  const clinicId = profile?.clinic_id ?? "clinic_demo";
 
   const [activeTab, setActiveTab] = useState<"list" | "form">("list");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState(AVAILABLE_COLORS[0]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const [tags, setTags] = useState<TagItem[]>([]);
+  const [tags, setTags] = useState<TagItem[]>([
+    { id: "tag-1", name: "Pós-consulta", color: "#0A84FF", clinicId },
+    { id: "tag-2", name: "Retorno", color: "#34C759", clinicId },
+    { id: "tag-3", name: "Reclamação", color: "#FF3B30", clinicId },
+  ]);
 
   const isEditing = Boolean(editingId);
   const canSubmit = name.trim().length > 0;
 
   const clinicLabel = useMemo(() => {
     if (!profile) {
-      return "Clínica não identificada";
+      return "Clínica atual (demo)";
     }
 
     return `Clínica ${profile.clinic_id}`;
@@ -56,7 +58,6 @@ export const Tags: React.FC = () => {
     setName("");
     setColor(AVAILABLE_COLORS[0]);
     setEditingId(null);
-    setError(null);
   };
 
   const handleEdit = (tag: TagItem) => {
@@ -66,120 +67,39 @@ export const Tags: React.FC = () => {
     setColor(tag.color);
   };
 
-  const fetchTags = async (clinic: string) => {
-    setLoading(true);
-    setError(null);
-
-    const { data, error: fetchError } = await supabase
-      .from("tags")
-      .select("id, name, color, clinic_id")
-      .eq("clinic_id", clinic)
-      .order("created_at", { ascending: false });
-
-    if (fetchError) {
-      console.error("Erro ao buscar tags:", fetchError);
-      setError("Não foi possível carregar as tags.");
-      setLoading(false);
-      return;
-    }
-
-    setTags(
-      (data ?? []).map((tag) => ({
-        id: tag.id,
-        name: tag.name,
-        color: tag.color,
-        clinicId: tag.clinic_id,
-      }))
-    );
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    if (authLoading) {
-      setLoading(true);
-      return;
-    }
-
-    if (!clinicId) {
-      setTags([]);
-      setLoading(false);
-      return;
-    }
-
-    fetchTags(clinicId);
-  }, [authLoading, clinicId]);
-
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
     if (!canSubmit) {
       return;
     }
 
-    if (!clinicId) {
-      setError("Selecione uma clínica antes de salvar a tag.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    if (isEditing && editingId) {
-      const { error: updateError } = await supabase
-        .from("tags")
-        .update({ name: name.trim(), color })
-        .eq("id", editingId)
-        .eq("clinic_id", clinicId);
-
-      if (updateError) {
-        console.error("Erro ao atualizar tag:", updateError);
-        setError("Não foi possível atualizar a tag.");
-        setLoading(false);
-        return;
-      }
+    if (isEditing) {
+      setTags((prev) =>
+        prev.map((tag) =>
+          tag.id === editingId
+            ? {
+                ...tag,
+                name: name.trim(),
+                color,
+              }
+            : tag
+        )
+      );
     } else {
-      const { error: insertError } = await supabase.from("tags").insert({
-        name: name.trim(),
-        color,
-        clinic_id: clinicId,
-      });
-
-      if (insertError) {
-        console.error("Erro ao criar tag:", insertError);
-        setError("Não foi possível criar a tag.");
-        setLoading(false);
-        return;
-      }
+      setTags((prev) => [
+        {
+          id: `tag-${Date.now()}`,
+          name: name.trim(),
+          color,
+          clinicId,
+        },
+        ...prev,
+      ]);
     }
 
-    await fetchTags(clinicId);
     setActiveTab("list");
     resetForm();
-  };
-
-  const handleDelete = async (tagId: string) => {
-    if (!clinicId) {
-      setError("Selecione uma clínica antes de remover a tag.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const { error: deleteError } = await supabase
-      .from("tags")
-      .delete()
-      .eq("id", tagId)
-      .eq("clinic_id", clinicId);
-
-    if (deleteError) {
-      console.error("Erro ao remover tag:", deleteError);
-      setError("Não foi possível remover a tag.");
-      setLoading(false);
-      return;
-    }
-
-    await fetchTags(clinicId);
   };
 
   return (
@@ -245,7 +165,6 @@ export const Tags: React.FC = () => {
                   setActiveTab("form");
                   resetForm();
                 }}
-                disabled={!clinicId || loading}
               >
                 <span className="flex items-center gap-2">
                   <PlusCircleIcon className="h-4 w-4" />
@@ -254,72 +173,37 @@ export const Tags: React.FC = () => {
               </Button>
             </div>
 
-            {error && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            {loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((item) => (
-                  <div
-                    key={item}
-                    className="h-16 rounded-lg bg-gray-100 animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : tags.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">
-                Nenhuma tag cadastrada para esta clínica.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {tags.map((tag) => (
-                  <div
-                    key={tag.id}
-                    className="flex flex-wrap items-center justify-between gap-4 border border-gray-200 rounded-lg px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="h-4 w-4 rounded-full border border-gray-200"
-                        style={{ backgroundColor: tag.color }}
-                      />
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {tag.name}
-                        </p>
-                        <p className="text-xs text-gray-500">{tag.clinicId}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(tag)}
-                        disabled={loading}
-                      >
-                        <span className="flex items-center gap-2 text-gray-700">
-                          <PencilIcon className="h-4 w-4" />
-                          Editar
-                        </span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(tag.id)}
-                        disabled={loading}
-                      >
-                        <span className="flex items-center gap-2 text-red-600">
-                          <Trash2Icon className="h-4 w-4" />
-                          Remover
-                        </span>
-                      </Button>
+            <div className="space-y-3">
+              {tags.map((tag) => (
+                <div
+                  key={tag.id}
+                  className="flex flex-wrap items-center justify-between gap-4 border border-gray-200 rounded-lg px-4 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="h-4 w-4 rounded-full border border-gray-200"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {tag.name}
+                      </p>
+                      <p className="text-xs text-gray-500">{tag.clinicId}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleEdit(tag)}
+                  >
+                    <span className="flex items-center gap-2 text-gray-700">
+                      <PencilIcon className="h-4 w-4" />
+                      Editar
+                    </span>
+                  </Button>
+                </div>
+              ))}
+            </div>
           </Card>
         ) : (
           <Card className="p-6">
@@ -333,11 +217,6 @@ export const Tags: React.FC = () => {
             </div>
 
             <form className="space-y-6" onSubmit={handleSubmit}>
-              {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
               <div className="grid gap-4 md:grid-cols-[1.2fr,1fr]">
                 <div>
                   <label className="text-sm font-medium text-gray-700">
@@ -378,7 +257,6 @@ export const Tags: React.FC = () => {
                     <button
                       key={hex}
                       type="button"
-                      aria-label={`Selecionar cor ${hex}`}
                       className={`h-8 w-8 rounded-full border-2 transition ${
                         color === hex
                           ? "border-gray-900"
@@ -404,12 +282,7 @@ export const Tags: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={!canSubmit || !clinicId || loading}
-                  isLoading={loading}
-                >
+                <Button type="submit" variant="primary" disabled={!canSubmit}>
                   {isEditing ? "Salvar alterações" : "Criar tag"}
                 </Button>
                 <Button
@@ -419,7 +292,6 @@ export const Tags: React.FC = () => {
                     setActiveTab("list");
                     resetForm();
                   }}
-                  disabled={loading}
                 >
                   Cancelar
                 </Button>
