@@ -84,12 +84,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const currentSession = data.session ?? null;
         setSession(currentSession);
         setAuthUser(currentSession?.user ?? null);
-        setLoading(false);
 
         if (currentSession?.user) {
-          void loadProfileSafe(currentSession.user.id);
-        } else {
-          setProfile(null);
+          await loadProfile(currentSession.user.id);
         }
       } catch (error) {
         console.error("Erro ao inicializar sessão:", error);
@@ -109,10 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setSession(newSession);
         setAuthUser(newSession?.user ?? null);
-        setLoading(false);
 
         if (newSession?.user) {
-          void loadProfileSafe(newSession.user.id);
+          await loadProfile(newSession.user.id);
         } else {
           setProfile(null);
         }
