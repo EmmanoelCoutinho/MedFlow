@@ -7,7 +7,7 @@ import {
   useState,
   ReactNode,
 } from "react";
-import { Session, User } from "@supabase/supabase-js";
+import { User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 
 /**
@@ -26,7 +26,6 @@ export type ClinicUser = {
 type AuthContextType = {
   authUser: User | null; // Supabase Auth User
   profile: ClinicUser | null; // clinic_users
-  session: Session | null;
   loading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -34,10 +33,47 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const STORAGE_AUTH_USER_KEY = "medflow.auth.user";
+const STORAGE_PROFILE_KEY = "medflow.auth.profile";
+
+const readStorage = <T,>(key: string): T | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.error("Erro ao ler storage:", error);
+    return null;
+  }
+};
+
+const writeStorage = (key: string, value: unknown) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (value === null || value === undefined) {
+      window.localStorage.removeItem(key);
+      return;
+    }
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error("Erro ao gravar storage:", error);
+  }
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [authUser, setAuthUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<ClinicUser | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(() =>
+    readStorage<User>(STORAGE_AUTH_USER_KEY),
+  );
+  const [profile, setProfile] = useState<ClinicUser | null>(() =>
+    readStorage<ClinicUser>(STORAGE_PROFILE_KEY),
+  );
   const [loading, setLoading] = useState(true);
 
   /**
@@ -53,19 +89,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.error("Erro ao carregar clinic_users:", error);
       setProfile(null);
+      writeStorage(STORAGE_PROFILE_KEY, null);
       return;
     }
 
     setProfile(data);
-  };
-
-  const loadProfileSafe = async (userId: string) => {
-    try {
-      await loadProfile(userId);
-    } catch (error) {
-      console.error("Erro ao carregar clinic_users:", error);
-      setProfile(null);
-    }
+    writeStorage(STORAGE_PROFILE_KEY, data);
   };
 
   /**
@@ -82,11 +111,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
 
         const currentSession = data.session ?? null;
-        setSession(currentSession);
         setAuthUser(currentSession?.user ?? null);
+        writeStorage(STORAGE_AUTH_USER_KEY, currentSession?.user ?? null);
 
         if (currentSession?.user) {
           await loadProfile(currentSession.user.id);
+        } else {
+          setProfile(null);
+          writeStorage(STORAGE_PROFILE_KEY, null);
         }
       } catch (error) {
         console.error("Erro ao inicializar sessão:", error);
@@ -104,13 +136,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setLoading(true);
       try {
-        setSession(newSession);
         setAuthUser(newSession?.user ?? null);
+        writeStorage(STORAGE_AUTH_USER_KEY, newSession?.user ?? null);
 
         if (newSession?.user) {
           await loadProfile(newSession.user.id);
         } else {
           setProfile(null);
+          writeStorage(STORAGE_PROFILE_KEY, null);
         }
       } catch (error) {
         console.error("Erro ao atualizar sessão:", error);
@@ -140,14 +173,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
-    setSession(data.session ?? null);
     setAuthUser(data.user ?? null);
+    writeStorage(STORAGE_AUTH_USER_KEY, data.user ?? null);
     setLoading(false);
 
     if (data.user) {
-      void loadProfileSafe(data.user.id);
+      await loadProfile(data.user.id);
     } else {
       setProfile(null);
+      writeStorage(STORAGE_PROFILE_KEY, null);
     }
 
     return { error: null };
@@ -159,9 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     setLoading(true);
     await supabase.auth.signOut();
-    setSession(null);
     setAuthUser(null);
     setProfile(null);
+    writeStorage(STORAGE_AUTH_USER_KEY, null);
+    writeStorage(STORAGE_PROFILE_KEY, null);
     setLoading(false);
   };
 
@@ -170,7 +205,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         authUser,
         profile,
-        session,
         loading,
         signInWithEmail,
         signOut,
