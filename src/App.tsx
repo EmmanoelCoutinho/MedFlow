@@ -5,6 +5,7 @@ import { Chat } from './pages/Chat';
 import { Header } from './components/layout/Header';
 import { AuthProvider } from './contexts/AuthContext';
 import { InboxEmpty } from './pages/InboxEmpty';
+import { Tags } from './pages/Tags';
 function RoutedApp() {
   const location = useLocation();
   const showHeader = location.pathname !== '/login';
@@ -25,6 +26,7 @@ function RoutedApp() {
           <Route path="/inbox" element={<Inbox />}>
             <Route index element={<InboxEmpty />} />
             <Route path="chat/:id" element={<Chat />} />
+            <Route path="tags" element={<Tags />} />
           </Route>
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
