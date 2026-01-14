@@ -62,6 +62,8 @@ export function useConversations(options: UseConversationsOptions = {}) {
     () => readLastOpenedAt()
   );
   const lastOpenedAtRef = useRef(lastOpenedAt);
+  const lastRefetchAtRef = useRef(0);
+  const refetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     lastOpenedAtRef.current = lastOpenedAt;
@@ -267,6 +269,28 @@ export function useConversations(options: UseConversationsOptions = {}) {
     setLoading(false);
   }, [authUser, options.status, options.channel]);
 
+  const scheduleRefetch = useCallback(() => {
+    const cooldownMs = 2500;
+    const now = Date.now();
+    const elapsed = now - lastRefetchAtRef.current;
+
+    if (elapsed >= cooldownMs) {
+      lastRefetchAtRef.current = now;
+      fetchConversations();
+      return;
+    }
+
+    if (refetchTimeoutRef.current) {
+      return;
+    }
+
+    refetchTimeoutRef.current = setTimeout(() => {
+      lastRefetchAtRef.current = Date.now();
+      refetchTimeoutRef.current = null;
+      fetchConversations();
+    }, cooldownMs - elapsed);
+  }, [fetchConversations]);
+
   // carregamento inicial + quando mudar filtro (status/canal)
   useEffect(() => {
     if (authLoading) {
@@ -276,6 +300,14 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
     fetchConversations();
   }, [authLoading, fetchConversations]);
+
+  useEffect(() => {
+    return () => {
+      if (refetchTimeoutRef.current) {
+        clearTimeout(refetchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // realtime focado em messages (igual o useMessages, mas atualizando a lista)
   useEffect(() => {
@@ -307,6 +339,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
             );
             if (idx === -1) {
               // conversa nao esta na lista (pode nao ser "open" ou nao bater o filtro)
+              scheduleRefetch();
               return current;
             }
 
@@ -351,7 +384,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUser, lastOpenedAt]);
+  }, [authUser, lastOpenedAt, scheduleRefetch]);
 
   const markAsRead = useCallback((conversationId: string) => {
     const now = Date.now();
