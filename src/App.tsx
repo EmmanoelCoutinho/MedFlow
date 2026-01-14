@@ -47,7 +47,7 @@ function RoutedApp() {
   const showHeader = location.pathname !== '/login';
   const { loading } = useAuth();
 
-  if (loading) {
+  if (loading && location.pathname !== '/login') {
     return <AuthLoadingScreen />;
   }
 
