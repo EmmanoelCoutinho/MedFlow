@@ -62,7 +62,7 @@ export const Inbox: React.FC = () => {
   const sidebarItems = [
     { label: "Atendimentos", icon: MessageCircleIcon },
     { label: "Carteira de contatos", icon: UsersIcon },
-    { label: "Departamento", icon: Building2Icon },
+    { label: "Departamentos", icon: Building2Icon },
     { label: "Tags", icon: TagIcon },
     { label: "Bots", icon: BotIcon },
     { label: "Mensagens rápidas", icon: MessageSquareTextIcon },

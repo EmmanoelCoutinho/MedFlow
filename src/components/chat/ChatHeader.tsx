@@ -1,17 +1,28 @@
-import React from 'react';
-import { ArrowLeftIcon, MoreVerticalIcon } from 'lucide-react';
-import { Conversation } from '../../types';
-import { Badge } from '../ui/Badge';
-import { Button } from '../ui/Button';
+import React from "react";
+import { ArrowLeftIcon, MoreVerticalIcon } from "lucide-react";
+import { Conversation } from "../../types";
+import { Badge } from "../ui/Badge";
+import { Button } from "../ui/Button";
+import { TbMessageCheck } from "react-icons/tb";
+import { TbMessage2X } from "react-icons/tb";
+import { HiOutlineSwitchHorizontal } from "react-icons/hi";
+import { FiSearch } from "react-icons/fi";
+import { CustomTooltip } from "../ui/CustomTooltip";
+
 interface ChatHeaderProps {
   conversation: Conversation;
   onBack: () => void;
 }
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
   conversation,
-  onBack
+  onBack,
 }) => {
-  const initials = conversation.contactName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const initials = conversation.contactName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
   const avatar = conversation.contactAvatar;
   return (
     <div className="sticky top-0 z-30 h-20 border-b border-[#E5E7EB] bg-white p-4">
@@ -53,16 +64,31 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm">
-            <MoreVerticalIcon className="w-4 h-4" />
-          </Button>
-          <Button
-            className="bg-red-600 hover:bg-red-700"
-            variant="secondary"
-            size="sm"
-          >
-            Finalizar Chat  
-          </Button>
+          <CustomTooltip text="Buscar na conversa">
+            <Button variant="ghost" size="sm">
+              <FiSearch className="w-5 h-5" />
+            </Button>
+          </CustomTooltip>
+          <CustomTooltip text="Traferir conversa">
+            <Button variant="ghost" size="sm">
+              <HiOutlineSwitchHorizontal className="w-5 h-5" />
+            </Button>
+          </CustomTooltip>
+          <CustomTooltip text="Aceitar conversa">
+            <Button variant="ghost" size="sm">
+              <TbMessageCheck className="w-5 h-5" />
+            </Button>
+          </CustomTooltip>
+          <CustomTooltip text="Recusar conversa">
+            <Button variant="ghost" size="sm">
+              <TbMessage2X className="w-5 h-5" />
+            </Button>
+          </CustomTooltip>
+          <CustomTooltip text="Mais opções">
+            <Button variant="ghost" size="sm">
+              <MoreVerticalIcon className="w-5 h-5" />
+            </Button>
+          </CustomTooltip>
         </div>
       </div>
     </div>
