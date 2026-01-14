@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import type { Conversation, Channel, Tag } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 type UseConversationsOptions = {
   status?: string;
@@ -53,6 +54,7 @@ export const persistConversationOpenedAt = (
 };
 
 export function useConversations(options: UseConversationsOptions = {}) {
+  const { authUser, loading: authLoading } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<any>(null);
@@ -137,6 +139,12 @@ export function useConversations(options: UseConversationsOptions = {}) {
   };
 
   const fetchConversations = useCallback(async () => {
+    if (!authUser) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -257,15 +265,24 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
     setConversations(mapped);
     setLoading(false);
-  }, [options.status, options.channel]);
+  }, [authUser, options.status, options.channel]);
 
   // carregamento inicial + quando mudar filtro (status/canal)
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
     fetchConversations();
-  }, [fetchConversations]);
+  }, [authLoading, fetchConversations]);
 
   // realtime focado em messages (igual o useMessages, mas atualizando a lista)
   useEffect(() => {
+    if (!authUser) {
+      return;
+    }
+
     const channel = supabase
       .channel('inbox-conversations-realtime')
       .on(
@@ -334,7 +351,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [lastOpenedAt]);
+  }, [authUser, lastOpenedAt]);
 
   const markAsRead = useCallback((conversationId: string) => {
     const now = Date.now();

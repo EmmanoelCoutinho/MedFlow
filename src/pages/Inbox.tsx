@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   BotIcon,
   Building2Icon,
@@ -22,6 +22,7 @@ import type { Channel, Tag } from "../types";
 
 export const Inbox: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const {
     conversations,
@@ -60,10 +61,10 @@ export const Inbox: React.FC = () => {
   });
 
   const sidebarItems = [
-    { label: "Atendimentos", icon: MessageCircleIcon },
+    { label: "Atendimentos", icon: MessageCircleIcon, path: "/inbox" },
     { label: "Carteira de contatos", icon: UsersIcon },
     { label: "Departamentos", icon: Building2Icon },
-    { label: "Tags", icon: TagIcon },
+    { label: "Tags", icon: TagIcon, path: "/inbox/tags" },
     { label: "Bots", icon: BotIcon },
     { label: "Mensagens rápidas", icon: MessageSquareTextIcon },
   ];
@@ -97,12 +98,19 @@ export const Inbox: React.FC = () => {
         <nav className="flex-1 p-2 space-y-1">
           {sidebarItems.map((item, index) => {
             const Icon = item.icon;
-            const active = index === 0;
+            const active = item.path
+              ? location.pathname === item.path
+              : index === 0 && location.pathname === "/inbox";
 
             return (
               <button
                 key={item.label}
                 type="button"
+                onClick={() => {
+                  if (item.path) {
+                    navigate(item.path);
+                  }
+                }}
                 className={[
                   "w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
                   "justify-center group-hover:justify-start",
