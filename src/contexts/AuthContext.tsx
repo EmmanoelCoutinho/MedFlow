@@ -59,6 +59,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(data);
   };
 
+  const loadProfileSafe = async (userId: string) => {
+    try {
+      await loadProfile(userId);
+    } catch (error) {
+      console.error("Erro ao carregar clinic_users:", error);
+      setProfile(null);
+    }
+  };
+
   /**
    * Bootstrap + listener de auth
    */
@@ -133,12 +142,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setSession(data.session ?? null);
     setAuthUser(data.user ?? null);
+    setLoading(false);
 
     if (data.user) {
-      await loadProfile(data.user.id);
+      void loadProfileSafe(data.user.id);
+    } else {
+      setProfile(null);
     }
 
-    setLoading(false);
     return { error: null };
   };
 
