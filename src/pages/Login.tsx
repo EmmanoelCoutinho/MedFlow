@@ -1,5 +1,6 @@
-import React, { FormEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { FormEvent, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import type { Location } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -9,6 +10,7 @@ import logo from '../assets/logo-unxet.png';
 export const Login: React.FC = () => {
   const { signInWithEmail, loading, authUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [error] = useState('');
   const [email, setEmail] = useState('');
@@ -24,10 +26,13 @@ export const Login: React.FC = () => {
     }
   }
 
-  if (authUser) {
-    navigate("/inbox");
-    return null;
-  }
+  useEffect(() => {
+    if (!authUser) {
+      return;
+    }
+    const from = (location.state as { from?: Location })?.from?.pathname;
+    navigate(from || '/inbox', { replace: true });
+  }, [authUser, location.state, navigate]);
 
   return (
     <div className="min-h-screen w-full bg-white flex items-center justify-center p-4">

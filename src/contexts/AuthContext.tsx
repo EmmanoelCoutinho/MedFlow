@@ -59,6 +59,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(data);
   };
 
+  const loadProfileSafe = async (userId: string) => {
+    try {
+      await loadProfile(userId);
+    } catch (error) {
+      console.error("Erro ao carregar clinic_users:", error);
+      setProfile(null);
+    }
+  };
+
   /**
    * Bootstrap + listener de auth
    */
@@ -67,19 +76,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const init = async () => {
       setLoading(true);
-      const { data } = await supabase.auth.getSession();
+      try {
+        const { data } = await supabase.auth.getSession();
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      const currentSession = data.session ?? null;
-      setSession(currentSession);
-      setAuthUser(currentSession?.user ?? null);
+        const currentSession = data.session ?? null;
+        setSession(currentSession);
+        setAuthUser(currentSession?.user ?? null);
+        setLoading(false);
 
-      if (currentSession?.user) {
-        await loadProfile(currentSession.user.id);
+        if (currentSession?.user) {
+          void loadProfileSafe(currentSession.user.id);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error("Erro ao inicializar sessão:", error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     };
 
     init();
@@ -87,16 +105,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      setSession(newSession);
-      setAuthUser(newSession?.user ?? null);
+      setLoading(true);
+      try {
+        setSession(newSession);
+        setAuthUser(newSession?.user ?? null);
+        setLoading(false);
 
-      if (newSession?.user) {
-        await loadProfile(newSession.user.id);
-      } else {
-        setProfile(null);
+        if (newSession?.user) {
+          void loadProfileSafe(newSession.user.id);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error("Erro ao atualizar sessão:", error);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => {
@@ -122,12 +146,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setSession(data.session ?? null);
     setAuthUser(data.user ?? null);
+    setLoading(false);
 
     if (data.user) {
-      await loadProfile(data.user.id);
+      void loadProfileSafe(data.user.id);
+    } else {
+      setProfile(null);
     }
 
-    setLoading(false);
     return { error: null };
   };
 
