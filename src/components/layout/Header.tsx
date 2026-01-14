@@ -24,13 +24,11 @@ export const Header = () => {
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const handleSingOut = () => {
-    signOut();
+  const handleSingOut = async () => {
+    await signOut();
     setOpen(false);
-    setTimeout(() => {
-      navigate("/login");
-    }, 1000)
-  }
+    navigate("/login");
+  };
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -110,5 +108,4 @@ export const Header = () => {
     </header>
   );
 };
-
 
