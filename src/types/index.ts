@@ -1,7 +1,16 @@
 export type Channel = 'whatsapp' | 'instagram' | 'messenger';
-export type Tag = 'Pacientes' | 'Médicos' | 'Vendas' | 'Suporte';
+
+export type Tag = {
+  id: string;
+  name: string;
+  color: string;
+  clinicId?: string;
+  createdAt?: string;
+};
+
 export type Conversation = {
   id: string;
+  clinicId?: string;
   channel: Channel;
   contactName: string;
   contactNumber?: string;
@@ -17,7 +26,7 @@ export type Conversation = {
     | 'other';
   lastTimestamp: string;
   unreadCount: number;
-  tag?: Tag;
+  tags?: Tag[];
   assignedTo?: string;
   status: 'em_andamento' | 'finalizada';
 };

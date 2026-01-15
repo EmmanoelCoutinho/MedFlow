@@ -6,7 +6,6 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { Conversation } from "../../types";
-import { Badge } from "../ui/Badge";
 interface ConversationItemProps {
   conversation: Conversation;
   onClick: () => void;
@@ -16,7 +15,7 @@ type Channel = "whatsapp" | "instagram" | "messenger";
 export const ConversationItem: React.FC<ConversationItemProps> = ({
   conversation,
   onClick,
-}) => {
+}) => {  
   
   const CHANNEL_CONFIG: Record<
     Channel,
@@ -107,15 +106,21 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
             {renderLastMessage()}
           </p>
           <div className="flex items-center gap-2 flex-wrap relative">
-            <span className={`flex items-center gap-1 text-xs font-medium ${channelInfo.textColor}`}>
+            <span
+              className={`flex items-center gap-1 text-xs font-medium ${channelInfo.textColor}`}
+            >
               {channelInfo.icon}
               {channelInfo.name}
             </span>
-            {conversation.tag && (
-              <Badge variant="tag" tag={conversation.tag}>
-                {conversation.tag}
-              </Badge>
-            )}
+            {conversation.tags &&
+              conversation.tags.map((tag) => (
+                <span
+                  className="inline-flex rounded-full px-3 py-1 text-xs font-medium text-white select-none"
+                  style={{ backgroundColor: tag.color }}
+                >
+                  {tag.name}
+                </span>
+              ))}
             {conversation.unreadCount > 0 && (
               <span className="absolute right-0 bg-[#0A84FF] text-white text-xs px-2 py-0.5 rounded-full">
                 {conversation.unreadCount}

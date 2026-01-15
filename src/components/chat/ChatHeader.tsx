@@ -1,21 +1,23 @@
 import React from "react";
-import { ArrowLeftIcon, MoreVerticalIcon } from "lucide-react";
 import { Conversation } from "../../types";
-import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { TbMessageCheck } from "react-icons/tb";
 import { TbMessage2X } from "react-icons/tb";
 import { HiOutlineSwitchHorizontal } from "react-icons/hi";
 import { FiSearch } from "react-icons/fi";
 import { CustomTooltip } from "../ui/CustomTooltip";
+import { ArrowLeftIcon, TagIcon, MoreVerticalIcon } from "lucide-react";
+import { CustomDropdown } from "../ui/CustomDropdown";
 
 interface ChatHeaderProps {
   conversation: Conversation;
   onBack: () => void;
+  onManageTags?: () => void;
 }
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
   conversation,
   onBack,
+  onManageTags,
 }) => {
   const initials = conversation.contactName
     .split(" ")
@@ -55,11 +57,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                   {conversation.contactNumber}
                 </span>
               )}
-              {conversation.tag && (
-                <Badge variant="tag" tag={conversation.tag}>
-                  {conversation.tag}
-                </Badge>
-              )}
+              {conversation.tags &&
+                conversation.tags.map((tag) => (
+                  <span
+                    className="inline-flex rounded-full px-3 py-1 text-xs font-medium text-white select-none"
+                    style={{ backgroundColor: tag.color }}
+                  >
+                    {tag.name}
+                  </span>
+                ))}
             </div>
           </div>
         </div>
@@ -84,11 +90,22 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
               <TbMessage2X className="w-5 h-5" />
             </Button>
           </CustomTooltip>
-          <CustomTooltip text="Mais opções">
-            <Button variant="ghost" size="sm">
-              <MoreVerticalIcon className="w-5 h-5" />
-            </Button>
-          </CustomTooltip>
+          <CustomDropdown
+            trigger={
+              // <CustomTooltip text="Mais opções">
+              <Button variant="ghost" size="sm">
+                <MoreVerticalIcon className="w-5 h-5" />
+              </Button>
+              // </CustomTooltip>
+            }
+            items={[
+              {
+                label: "Gerenciar Etiquetas",
+                icon: <TagIcon className="h-4 w-4" />,
+                onSelect: () => onManageTags?.(),
+              },
+            ]}
+          />
         </div>
       </div>
     </div>

@@ -151,7 +151,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
     setError(null);
 
     let query = supabase
-      .from('conversations')
+      .from("conversations")
       .select(
         `
         id,
@@ -170,13 +170,17 @@ export function useConversations(options: UseConversationsOptions = {}) {
           payload
         ),
         conversation_tags (
+          tag_id,
           tags (
-            name
+            id,
+            name,
+            color
           )
         )
+
       `
       )
-      .order('last_message_at', { ascending: false });
+      .order("last_message_at", { ascending: false });
 
     if (options.status) {
       query = query.eq('status', options.status);
@@ -227,13 +231,17 @@ export function useConversations(options: UseConversationsOptions = {}) {
           contactRow?.profile_pic_url ??
           contactRow?.image_url;
 
-        const rawTags: any = row.conversation_tags?.[0]?.tags;
-        let tagName: string | undefined;
-        if (Array.isArray(rawTags)) {
-          tagName = rawTags[0]?.name;
-        } else {
-          tagName = rawTags?.name;
-        }
+        const ct = (row.conversation_tags as any[]) ?? [];
+        const tags: Tag[] = ct
+          .map((x) => x.tags)
+          .flat()
+          .filter(Boolean)
+          .map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            color: t.color ?? "#0A84FF",
+          }));
+
 
         const lastTime = new Date(
           last?.sent_at ?? row.last_message_at ?? 0
@@ -260,7 +268,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
           lastTimestamp: last?.sent_at ?? row.last_message_at ?? '',
           unreadCount: isUnread ? 1 : 0,
 
-          tag: tagName as Tag | undefined,
+          tags,
           assignedTo: row.assigned_user_id ?? undefined,
         };
       }) ?? [];
@@ -290,6 +298,70 @@ export function useConversations(options: UseConversationsOptions = {}) {
       fetchConversations();
     }, cooldownMs - elapsed);
   }, [fetchConversations]);
+
+  useEffect(() => {
+    if (!authUser) return;
+
+    const reloadTagForConversation = async (conversationId: string) => {
+      // busca as tags atuais da conversa (join)
+      const { data, error } = await supabase
+        .from("conversation_tags")
+        .select("tags(id,name,color)")
+        .eq("conversation_id", conversationId);
+
+      if (error) {
+        console.warn("[RT] erro ao recarregar tags:", error);
+        return;
+      }
+
+      const tags: Tag[] = ((data as any[]) ?? [])
+        .map((r) => r.tags)
+        .flat()
+        .filter(Boolean)
+        .map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          color: t.color ?? "#0A84FF",
+        }));
+
+      setConversations((current) => {
+        const idx = current.findIndex((c) => c.id === conversationId);
+        if (idx === -1) {
+          scheduleRefetch();
+          return current;
+        }
+
+        const clone = [...current];
+        clone[idx] = { ...clone[idx], tags };
+        return clone;
+      });
+    };
+
+    const channel = supabase
+      .channel("inbox-conversation-tags-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_tags" },
+        (payload) => {
+          const conversationId =
+            (payload.new as any)?.conversation_id ??
+            (payload.old as any)?.conversation_id;
+
+          if (!conversationId) return;
+
+          console.log("[RT] tags alteradas na conversa", conversationId);
+          reloadTagForConversation(conversationId);
+        }
+      )
+      .subscribe((status) => {
+        console.log("[RT] conversation_tags channel status:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [authUser, scheduleRefetch]);
+
 
   // carregamento inicial + quando mudar filtro (status/canal)
   useEffect(() => {

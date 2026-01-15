@@ -18,7 +18,7 @@ import { ChannelFilter } from "../components/inbox/ChannelFilter";
 import { TagFilter } from "../components/inbox/TagFilter";
 
 import { useConversations } from "../hooks/useConversations";
-import type { Channel, Tag } from "../types";
+import type { Channel } from "../types";
 
 export const Inbox: React.FC = () => {
   const navigate = useNavigate();
@@ -30,11 +30,11 @@ export const Inbox: React.FC = () => {
     markAsRead,
   } = useConversations({
     status: "open",
-  });
+  });  
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>([]);
-  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   // total unread
   const unreadCount = conversations.reduce(
@@ -54,8 +54,8 @@ export const Inbox: React.FC = () => {
       selectedChannels.length === 0 || selectedChannels.includes(conv.channel);
 
     const matchesTag =
-      selectedTags.length === 0 ||
-      (conv.tag && selectedTags.includes(conv.tag));
+      selectedTagIds.length === 0 ||
+      selectedTagIds.every((id) => conv.tags?.some((t) => t.id === id));
 
     return matchesSearch && matchesChannel && matchesTag;
   });
@@ -64,7 +64,7 @@ export const Inbox: React.FC = () => {
     { label: "Atendimentos", icon: MessageCircleIcon, path: "/inbox" },
     { label: "Carteira de contatos", icon: UsersIcon },
     { label: "Departamentos", icon: Building2Icon },
-    { label: "Tags", icon: TagIcon, path: "/inbox/tags" },
+    { label: "Etiquetas", icon: TagIcon, path: "/inbox/tags" },
     { label: "Bots", icon: BotIcon },
     { label: "Mensagens rápidas", icon: MessageSquareTextIcon },
   ];
@@ -76,7 +76,7 @@ export const Inbox: React.FC = () => {
         <div className="p-4 border-b">
           <div className="flex items-center gap-3">
             <img
-              src={'/logo-unxet.png'}
+              src={"/logo-unxet.png"}
               alt="Logo Unxet"
               className="h-9 w-9 rounded-md object-contain"
             />
@@ -154,7 +154,10 @@ export const Inbox: React.FC = () => {
             onChange={setSelectedChannels}
           />
 
-          <TagFilter selectedTags={selectedTags} onChange={setSelectedTags} />
+          <TagFilter
+            selectedTagIds={selectedTagIds}
+            onChange={setSelectedTagIds}
+          />
         </div>
 
         {/* Lista */}
