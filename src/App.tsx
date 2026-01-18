@@ -4,15 +4,16 @@ import {
   Route,
   Navigate,
   useLocation,
-} from 'react-router-dom';
-import { Login } from './pages/Login';
-import { Inbox } from './pages/Inbox';
-import { Chat } from './pages/Chat';
-import { Header } from './components/layout/Header';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { InboxEmpty } from './pages/InboxEmpty';
-import { Tags } from './pages/Tags';
-import { ReactNode } from 'react';
+} from "react-router-dom";
+import { Login } from "./pages/Login";
+import { Inbox } from "./pages/Inbox";
+import { Chat } from "./pages/Chat";
+import { Header } from "./components/layout/Header";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { InboxEmpty } from "./pages/InboxEmpty";
+import { Tags } from "./pages/Tags";
+import { ReactNode } from "react";
+import { ClinicProvider } from "./contexts/ClinicContext";
 
 type RequireAuthProps = {
   children: ReactNode;
@@ -44,34 +45,32 @@ const RequireAuth = ({ children }: RequireAuthProps) => {
 
 function RoutedApp() {
   const location = useLocation();
-  const showHeader = location.pathname !== '/login';
+  const showHeader = location.pathname !== "/login";
   const { loading } = useAuth();
 
-  if (loading && location.pathname !== '/login') {
+  if (loading && location.pathname !== "/login") {
     return <AuthLoadingScreen />;
   }
 
   return (
     <>
-      {showHeader && (
-        <Header />
-      )}
+      {showHeader && <Header />}
       <main
         className={
           showHeader
-            ? 'pt-16 h-screen box-border overflow-hidden'
-            : 'min-h-screen'
+            ? "pt-16 h-screen box-border overflow-hidden"
+            : "min-h-screen"
         }
       >
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
             path="/inbox"
-            element={(
+            element={
               <RequireAuth>
                 <Inbox />
               </RequireAuth>
-            )}
+            }
           >
             <Route index element={<InboxEmpty />} />
             <Route path="chat/:id" element={<Chat />} />
@@ -88,7 +87,9 @@ export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <RoutedApp />
+        <ClinicProvider>
+          <RoutedApp />
+        </ClinicProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import type { Conversation, Channel, Tag } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useClinic } from "../contexts/ClinicContext";
 
 type UseConversationsOptions = {
   status?: string;
@@ -55,6 +56,8 @@ export const persistConversationOpenedAt = (
 
 export function useConversations(options: UseConversationsOptions = {}) {
   const { authUser, loading: authLoading } = useAuth();
+  const { clinicId } = useClinic();
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<any>(null);
@@ -180,7 +183,10 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
       `
       )
+      .eq("clinic_id", clinicId)
       .order("last_message_at", { ascending: false });
+
+      query = query.neq("status", "closed").eq("assigned_user_id", authUser.id);
 
     if (options.status) {
       query = query.eq('status', options.status);
@@ -254,7 +260,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
         return {
           id: row.id,
           channel: row.channel as Channel,
-          status: row.status === 'open' ? 'em_andamento' : 'finalizada',
+          status: row.status,
 
           contactName:
             contactRow?.name ??
@@ -275,7 +281,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
     setConversations(mapped);
     setLoading(false);
-  }, [authUser, options.status, options.channel]);
+  }, [authUser, options.status, options.channel, clinicId]);
 
   const scheduleRefetch = useCallback(() => {
     const cooldownMs = 2500;

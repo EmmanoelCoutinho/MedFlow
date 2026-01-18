@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useState } from 'react';
-import type { Message as UiMessage } from '../types';
-import { supabase } from '../lib/supabaseClient';
+import { useCallback, useEffect, useState } from "react";
+import type { Message as UiMessage } from "../types";
+import { supabase } from "../lib/supabaseClient";
 
 type DbMessage = {
   id: string;
   conversation_id: string;
-  direction?: 'inbound' | 'outbound' | string | null;
+  direction?: "inbound" | "outbound" | string | null;
   text?: string | null;
   sent_at?: string | null;
   created_at?: string | null;
@@ -22,7 +22,7 @@ type DbMessage = {
 };
 
 const safeParsePayload = (raw: any) => {
-  if (typeof raw === 'string') {
+  if (typeof raw === "string") {
     try {
       return JSON.parse(raw);
     } catch {
@@ -53,12 +53,12 @@ const getMediaData = (payload: any) => {
 
   for (const candidate of candidates) {
     if (!candidate) continue;
-    if (candidate.image) return { type: 'image', data: candidate.image };
-    if (candidate.audio) return { type: 'audio', data: candidate.audio };
-    if (candidate.sticker) return { type: 'sticker', data: candidate.sticker };
-    if (candidate.video) return { type: 'video', data: candidate.video };
+    if (candidate.image) return { type: "image", data: candidate.image };
+    if (candidate.audio) return { type: "audio", data: candidate.audio };
+    if (candidate.sticker) return { type: "sticker", data: candidate.sticker };
+    if (candidate.video) return { type: "video", data: candidate.video };
     if (candidate.document)
-      return { type: 'document', data: candidate.document };
+      return { type: "document", data: candidate.document };
   }
   return { type: undefined, data: undefined };
 };
@@ -113,8 +113,8 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
   const mapped: UiMessage = {
     id: row.id,
     conversationId: row.conversation_id,
-    author: row.direction === 'inbound' ? 'cliente' : 'atendente',
-    text: row.text ?? caption ?? '',
+    author: row.direction === "inbound" ? "cliente" : "atendente",
+    text: row.text ?? caption ?? "",
     type,
     mediaUrl: mediaUrl ?? undefined,
     mediaMimeType: mediaMimeType ?? undefined,
@@ -123,8 +123,6 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
     payload,
     createdAt: row.sent_at ?? row.created_at ?? new Date().toISOString(),
   };
-
-  console.log('[mapDbMessage]', { row, mapped });
 
   return mapped;
 };
@@ -145,7 +143,7 @@ export function useMessages(conversationId: string | null) {
     setError(null);
 
     const { data, error } = await supabase
-      .from('messages')
+      .from("messages")
       .select(
         `
           id,
@@ -161,10 +159,10 @@ export function useMessages(conversationId: string | null) {
           media_url,
           media_mime_type,
           filename
-        `
+        `,
       )
-      .eq('conversation_id', conversationId)
-      .order('sent_at', { ascending: true });
+      .eq("conversation_id", conversationId)
+      .order("sent_at", { ascending: true });
 
     if (error) {
       setError(error);
@@ -188,11 +186,11 @@ export function useMessages(conversationId: string | null) {
     const channel = supabase
       .channel(`conversation-${conversationId}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
@@ -201,7 +199,7 @@ export function useMessages(conversationId: string | null) {
             if (current.some((m) => m.id === newMsg.id)) return current;
             return [...current, newMsg];
           });
-        }
+        },
       )
       .subscribe();
 

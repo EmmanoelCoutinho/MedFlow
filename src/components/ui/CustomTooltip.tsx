@@ -32,7 +32,7 @@ const variantClasses: Record<Variant, string> = {
     "border border-slate-700/40",
     "shadow-xl shadow-black/30",
     "backdrop-blur-md",
-    "ring-1 ring-white/5"
+    "ring-1 ring-white/5",
   ),
 
   // “Unxet signature”: fundo escuro + borda com acento/shine + faixa lateral
@@ -42,7 +42,7 @@ const variantClasses: Record<Variant, string> = {
     "border border-slate-700/40",
     "shadow-xl shadow-black/30",
     "backdrop-blur-md",
-    "ring-1 ring-white/5"
+    "ring-1 ring-white/5",
   ),
 
   // Claro, mas ainda com personalidade
@@ -52,7 +52,7 @@ const variantClasses: Record<Variant, string> = {
     "border border-slate-200/70",
     "shadow-xl shadow-black/10",
     "backdrop-blur-md",
-    "ring-1 ring-black/5"
+    "ring-1 ring-black/5",
   ),
 };
 
@@ -64,7 +64,7 @@ export function CustomTooltip({
   delayDuration = 200,
   disabled = false,
   sideOffset = 10,
-  variant = "glass",
+  variant = "brand",
   accentHex = "#0A84FF",
   contentClassName,
 }: Props) {
@@ -93,7 +93,7 @@ export function CustomTooltip({
               "data-[side=left]:slide-in-from-right-1",
               "data-[side=right]:slide-in-from-left-1",
               variantClasses[variant],
-              contentClassName
+              contentClassName,
             )}
           >
             {/* Faixa/acento “Unxet” */}
@@ -122,7 +122,7 @@ export function CustomTooltip({
             <span
               className={cn(
                 "relative block",
-                variant === "brand" ? "pl-3" : ""
+                variant === "brand" ? "pl-3" : "",
               )}
             >
               {text}
@@ -130,7 +130,7 @@ export function CustomTooltip({
 
             <Tooltip.Arrow
               className={cn(
-                variant === "light" ? "fill-white/90" : "fill-slate-950/80"
+                variant === "light" ? "fill-white/90" : "fill-slate-950/80",
               )}
             />
           </Tooltip.Content>

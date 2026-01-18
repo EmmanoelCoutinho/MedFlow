@@ -2,6 +2,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import logo from '../../assets/logo-unxet.png';
 import { useAuth } from '../../contexts/AuthContext';
+import { useClinic } from '../../contexts/ClinicContext';
 
 function getInitials(name: string) {
   return name
@@ -16,6 +17,7 @@ function getInitials(name: string) {
 export const Header = () => {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const { clinic } = useClinic();
 
   const initials = useMemo(() => getInitials(profile?.name || ''), [profile?.name]);
 
@@ -54,7 +56,7 @@ export const Header = () => {
             <img src={logo} alt="Unxet logo" className="w-36" />
           </Link>
         </div>
-        <div className="relative">
+        <div className="relative flex items-center justify-center gap-4">
           <button
             ref={buttonRef}
             onClick={() => setOpen((v) => !v)}
@@ -103,6 +105,7 @@ export const Header = () => {
               </div>
             </div>
           )}
+        <span>{clinic?.name}</span>
         </div>
       </div>
     </header>

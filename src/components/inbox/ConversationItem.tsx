@@ -112,15 +112,17 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
               {channelInfo.icon}
               {channelInfo.name}
             </span>
-            {conversation.tags &&
-              conversation.tags.map((tag) => (
-                <span
-                  className="inline-flex rounded-full px-3 py-1 text-xs font-medium text-white select-none"
-                  style={{ backgroundColor: tag.color }}
-                >
-                  {tag.name}
-                </span>
-              ))}
+            {conversation.tags?.map((tag) => (
+              <span
+                key={tag.id}
+                title={tag.name}
+                className="inline-flex rounded-full px-3 py-1 text-xs font-medium text-white select-none"
+                style={{ backgroundColor: tag.color ?? "#0A84FF" }}
+              >
+                {tag.name}
+              </span>
+            ))}
+
             {conversation.unreadCount > 0 && (
               <span className="absolute right-0 bg-[#0A84FF] text-white text-xs px-2 py-0.5 rounded-full">
                 {conversation.unreadCount}

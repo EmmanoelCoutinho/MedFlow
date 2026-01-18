@@ -28,7 +28,7 @@ export type Conversation = {
   unreadCount: number;
   tags?: Tag[];
   assignedTo?: string;
-  status: 'em_andamento' | 'finalizada';
+  status: 'open' | 'pending' | 'closed';
 };
 export type Message = {
   id: string;
