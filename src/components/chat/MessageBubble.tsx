@@ -1,5 +1,5 @@
 // src/components/chat/MessageBubble.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { DownloadIcon, FileIcon } from 'lucide-react';
 import type { Message as UiMessage } from '../../types';
 
@@ -90,6 +90,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const payload = message.payload ?? {};
   const isClient = message.author === 'cliente';
   const initials = getInitials(contactName);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
   // Preferimos sempre o que veio já mapeado
   const mediaUrl =
@@ -146,6 +147,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     ? `${documentLabel} - ${documentSize}`
     : documentLabel;
   const documentAccentClass = getDocumentAccentClass(documentLabel);
+  const hasMedia = Boolean(mediaUrl);
 
   // Se for apenas áudio, sem texto/legenda, queremos tirar a caixa externa
   const onlyAudio =
@@ -154,12 +156,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     mediaType === 'document' && (!displayText || !displayText.trim());
 
   const bubbleBase = 'space-y-2';
+  const bubblePadding = hasMedia ? 'p-2' : 'px-4 py-3';
   const bubbleClass = onlyAudio || onlyDocument
     ? bubbleBase
     : `${bubbleBase} ${
         isClient
-          ? 'rounded-lg px-4 py-3 bg-[#E5E7EB] text-[#1E1E1E]'
-          : 'rounded-lg px-4 py-3 bg-[#0A84FF] text-white'
+          ? `rounded-lg ${bubblePadding} bg-[#E5E7EB] text-[#1E1E1E]`
+          : `rounded-lg ${bubblePadding} bg-[#0A84FF] text-white`
       }`;
 
   return (
@@ -192,7 +195,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <img
                     src={mediaUrl}
                     alt="Imagem"
-                    className="rounded-lg max-w-xs"
+                    className="h-48 w-48 cursor-zoom-in rounded-lg object-cover"
+                    onClick={() => setPreviewSrc(mediaUrl)}
                   />
                 )}
 
@@ -217,7 +221,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 {mediaType === 'video' && (
                   <video
                     controls
-                    className="rounded-lg max-w-xs"
+                    className="h-48 w-48 rounded-lg object-cover"
                     src={mediaUrl}
                   />
                 )}
@@ -250,7 +254,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   <img
                     src={mediaUrl}
                     alt="Figurinha"
-                    className="rounded-lg max-w-[120px]"
+                    className="h-24 w-24 rounded-lg object-cover"
                   />
                 )}
               </>
@@ -277,6 +281,25 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
       </div>
+
+      {previewSrc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreviewSrc(null)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setPreviewSrc(null);
+          }}
+        >
+          <img
+            src={previewSrc}
+            alt="Pré-visualização"
+            className="max-h-full max-w-full rounded-lg object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 };
