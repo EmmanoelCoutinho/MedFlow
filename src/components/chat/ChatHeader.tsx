@@ -13,11 +13,15 @@ interface ChatHeaderProps {
   conversation: Conversation;
   onBack: () => void;
   onManageTags?: () => void;
+  onAccept?: () => void;
+  acceptDisabled?: boolean;
 }
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
   conversation,
   onBack,
   onManageTags,
+  onAccept,
+  acceptDisabled = false,
 }) => {
   const initials = conversation.contactName
     .split(" ")
@@ -81,7 +85,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             </Button>
           </CustomTooltip>
           <CustomTooltip text="Aceitar conversa">
-            <Button variant="ghost" size="sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onAccept}
+              disabled={acceptDisabled}
+              aria-disabled={acceptDisabled}
+            >
               <TbMessageCheck className="w-5 h-5" />
             </Button>
           </CustomTooltip>
