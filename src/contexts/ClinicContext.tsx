@@ -22,6 +22,7 @@ type ClinicMembership = {
   clinic_id: string;
   user_id: string;
   role?: string | null;
+  department_id?: string | null;
   // outros campos do clinic_users
 };
 
@@ -60,7 +61,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     // 1) pega membership do usuário
     const { data: membershipRow, error: memErr } = await supabase
       .from("clinic_users")
-      .select("clinic_id, user_id, role")
+      .select("clinic_id, user_id, role, department_id")
       .eq("user_id", authUser.id)
       .maybeSingle();
 

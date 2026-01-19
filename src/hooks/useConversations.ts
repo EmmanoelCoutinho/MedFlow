@@ -56,7 +56,8 @@ export const persistConversationOpenedAt = (
 
 export function useConversations(options: UseConversationsOptions = {}) {
   const { authUser, loading: authLoading } = useAuth();
-  const { clinicId } = useClinic();
+  const { clinicId, membership } = useClinic();
+  const departmentId = membership?.department_id ?? null;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +151,12 @@ export function useConversations(options: UseConversationsOptions = {}) {
       return;
     }
 
+    if (!clinicId || !departmentId) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -184,6 +191,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
       `
       )
       .eq("clinic_id", clinicId)
+      .eq("department_id", departmentId)
       .order("last_message_at", { ascending: false });
 
       query = query.neq("status", "closed").eq("assigned_user_id", authUser.id);
@@ -281,7 +289,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
     setConversations(mapped);
     setLoading(false);
-  }, [authUser, options.status, options.channel, clinicId]);
+  }, [authUser, options.status, options.channel, clinicId, departmentId]);
 
   const scheduleRefetch = useCallback(() => {
     const cooldownMs = 2500;
