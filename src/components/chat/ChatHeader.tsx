@@ -2,7 +2,6 @@ import React from "react";
 import { Conversation } from "../../types";
 import { Button } from "../ui/Button";
 import { TbMessageCheck } from "react-icons/tb";
-import { TbMessage2X } from "react-icons/tb";
 import { HiOutlineSwitchHorizontal } from "react-icons/hi";
 import { FiSearch } from "react-icons/fi";
 import { CustomTooltip } from "../ui/CustomTooltip";
@@ -83,11 +82,6 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           <CustomTooltip text="Aceitar conversa">
             <Button variant="ghost" size="sm">
               <TbMessageCheck className="w-5 h-5" />
-            </Button>
-          </CustomTooltip>
-          <CustomTooltip text="Recusar conversa">
-            <Button variant="ghost" size="sm">
-              <TbMessage2X className="w-5 h-5" />
             </Button>
           </CustomTooltip>
           <CustomDropdown

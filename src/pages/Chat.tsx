@@ -198,7 +198,7 @@ export const Chat: React.FC = () => {
 
     // mantém o "conversation.tag" (singular) sincronizado pra não quebrar filtros antigos
     setConversation((prev) =>
-      prev ? ({ ...prev, tag: mapped[0]?.name as any } as any) : prev
+      prev ? ({ ...prev, tag: mapped[0]?.name as any } as any) : prev,
     );
   }, []);
 
@@ -258,7 +258,7 @@ export const Chat: React.FC = () => {
               color
             )
           )
-        `
+        `,
         )
         .eq("id", id)
         .maybeSingle();
@@ -314,7 +314,7 @@ export const Chat: React.FC = () => {
         id: data.id,
         clinicId: (data as any).clinic_id ?? undefined,
         channel: data.channel as Channel,
-        status: data.status === "open" ? "em_andamento" : "finalizada",
+        status: data.status,
         contactName:
           contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
         contactNumber: contactRow?.phone ?? "",
@@ -383,7 +383,7 @@ export const Chat: React.FC = () => {
         () => {
           // sempre que inserir/remover, recarrega do banco (porque o payload não traz tags)
           reloadConversationTags(conversation.id);
-        }
+        },
       )
       .subscribe();
 
@@ -394,7 +394,7 @@ export const Chat: React.FC = () => {
 
   const addTagToConversation = async (
     conversationId: string,
-    tagId: string
+    tagId: string,
   ) => {
     const { error } = await supabase
       .from("conversation_tags")
@@ -405,7 +405,7 @@ export const Chat: React.FC = () => {
 
   const removeTagFromConversation = async (
     conversationId: string,
-    tagId: string
+    tagId: string,
   ) => {
     const { error } = await supabase
       .from("conversation_tags")
@@ -436,7 +436,7 @@ export const Chat: React.FC = () => {
         ? tag.name
         : selectedTags.filter((t) => t.id !== tag.id)[0]?.name;
       setConversation((prev) =>
-        prev ? ({ ...prev, tag: nextFirst as any } as any) : prev
+        prev ? ({ ...prev, tag: nextFirst as any } as any) : prev,
       );
     } finally {
       setTagsSavingId(null);
@@ -492,10 +492,10 @@ export const Chat: React.FC = () => {
         (outboundType === "image"
           ? "🖼️ Imagem"
           : outboundType === "audio"
-          ? "🎧 Áudio"
-          : outboundType === "document"
-          ? "📄 Documento"
-          : ""),
+            ? "🎧 Áudio"
+            : outboundType === "document"
+              ? "📄 Documento"
+              : ""),
       createdAt: new Date().toISOString(),
       type: outboundType,
       mediaUrl,
@@ -520,7 +520,7 @@ export const Chat: React.FC = () => {
           mediaMimeType,
           filename,
         },
-      }
+      },
     );
 
     if (error) {
@@ -540,7 +540,7 @@ export const Chat: React.FC = () => {
         if (filenameError) {
           console.warn(
             "Não foi possível persistir o nome do documento:",
-            filenameError
+            filenameError,
           );
         }
       }

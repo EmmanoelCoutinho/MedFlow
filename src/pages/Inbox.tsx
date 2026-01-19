@@ -26,30 +26,24 @@ export const Inbox: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Buscar conversas (vamos filtrar closed na UI)
   const { conversations, loading: isLoading, markAsRead } = useConversations();
 
-  // ✅ começa em "open"
   const [tab, setTab] = useState<InboxTab>("open");
-
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
-  // ✅ remove closed ANTES de qualquer coisa
   const visibleConversations = useMemo(() => {
     return conversations.filter((c) => c.status !== "closed");
   }, [conversations]);
 
-  // total unread (geral, sem closed)
   const unreadCount = useMemo(() => {
     return visibleConversations.reduce(
       (sum, conv) => sum + (conv.unreadCount || 0),
-      0
+      0,
     );
   }, [visibleConversations]);
 
-  // aplica filtros de busca/canal/tag (sem closed)
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
 
@@ -71,7 +65,6 @@ export const Inbox: React.FC = () => {
     });
   }, [visibleConversations, searchQuery, selectedChannels, selectedTagIds]);
 
-  // separa por status
   const openConversations = useMemo(() => {
     return filtered.filter((c) => c.status === "open");
   }, [filtered]);
@@ -85,14 +78,14 @@ export const Inbox: React.FC = () => {
   const unreadOpen = useMemo(() => {
     return openConversations.reduce(
       (sum, conv) => sum + (conv.unreadCount || 0),
-      0
+      0,
     );
   }, [openConversations]);
 
   const unreadPending = useMemo(() => {
     return pendingConversations.reduce(
       (sum, conv) => sum + (conv.unreadCount || 0),
-      0
+      0,
     );
   }, [pendingConversations]);
 
@@ -111,7 +104,9 @@ export const Inbox: React.FC = () => {
   ];
 
   return (
-    <div className="flex min-h-screen w-full bg-white overflow-hidden">
+    // ✅ h-screen garante altura fixa do viewport
+    // ✅ overflow-x-hidden evita cortar scroll vertical sem querer
+    <div className="flex h-screen w-full bg-white overflow-x-hidden">
       {/* Sidebar (minimizada por padrão, expande no hover) */}
       <aside className="group w-16 hover:w-64 transition-all duration-200 border-r bg-gray-50 flex flex-col overflow-hidden flex-shrink-0">
         <div className="p-4 border-b">
@@ -135,7 +130,8 @@ export const Inbox: React.FC = () => {
           </div>
         </div>
 
-        <nav className="flex-1 p-2 space-y-1">
+        {/* (opcional) se o menu crescer, deixa ele rolar */}
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
           {sidebarItems.map((item, index) => {
             const Icon = item.icon;
             const active = item.path
@@ -171,8 +167,10 @@ export const Inbox: React.FC = () => {
       </aside>
 
       {/* Sidebar de conversas */}
-      <div className="w-96 border-r flex flex-col h-full">
-        <div className="p-4 border-b">
+      {/* ✅ h-screen + min-h-0: essencial pra overflow funcionar dentro de flex */}
+      <div className="w-96 border-r flex flex-col h-screen min-h-0">
+        {/* ✅ shrink-0 pra esse bloco não “invadir” a área rolável */}
+        <div className="p-4 border-b shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Conversas</h2>
             {unreadCount > 0 && (
@@ -197,7 +195,6 @@ export const Inbox: React.FC = () => {
             onChange={setSelectedTagIds}
           />
 
-        </div>
           <div className="flex items-center mt-3">
             <button
               type="button"
@@ -245,9 +242,11 @@ export const Inbox: React.FC = () => {
               </span>
             </button>
           </div>
+        </div>
 
         {/* Lista */}
-        <div className="flex-1 overflow-y-auto">
+        {/* ✅ min-h-0 aqui também ajuda em alguns layouts */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {isLoading ? (
             <div className="p-4 space-y-3">
               {[1, 2, 3].map((i) => (
@@ -270,7 +269,7 @@ export const Inbox: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="divide-y">
+            <div className="divide-y pb-20">
               {currentList.map((conv) => (
                 <ConversationItem
                   key={conv.id}
@@ -286,6 +285,8 @@ export const Inbox: React.FC = () => {
         </div>
       </div>
 
+      {/* Conteúdo do chat */}
+      {/* ✅ min-h-0 pra permitir scroll interno do Outlet se precisar */}
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
         <Outlet />
       </div>
