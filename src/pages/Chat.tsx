@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useClinic } from "../contexts/ClinicContext";
 import type { Conversation, Message, Channel } from "../types";
 import { useMessages, mapDbMessage } from "../hooks/useMessages";
 import { persistConversationOpenedAt } from "../hooks/useConversations";
@@ -35,6 +36,8 @@ export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { authUser } = useAuth();
+  const { clinicId, membership } = useClinic();
+  const departmentId = membership?.department_id ?? null;
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const justOpenedRef = useRef(true);
@@ -226,6 +229,11 @@ export const Chat: React.FC = () => {
   // Buscar conversa + contato + tag
   useEffect(() => {
     if (!id) return;
+    if (!clinicId || !departmentId) {
+      setConversation(null);
+      setLoadingConversation(false);
+      return;
+    }
 
     const fetchConversation = async () => {
       setLoadingConversation(true);
@@ -264,6 +272,8 @@ export const Chat: React.FC = () => {
         `,
         )
         .eq("id", id)
+        .eq("clinic_id", clinicId)
+        .eq("department_id", departmentId)
         .maybeSingle();
 
       if (error) {
@@ -337,7 +347,7 @@ export const Chat: React.FC = () => {
     };
 
     fetchConversation();
-  }, [id]);
+  }, [id, clinicId, departmentId]);
 
   useEffect(() => {
     const clinicId = (conversation as any)?.clinicId as string | undefined;
