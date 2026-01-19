@@ -16,6 +16,7 @@ import { ChatHeader } from "../components/chat/ChatHeader";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { MessageInput } from "../components/chat/MessageInput";
 import { ArrowDownIcon } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
 type UiTag = { id: string; name: string; color: string };
 
@@ -33,6 +34,7 @@ type SendableInput =
 export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { authUser } = useAuth();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const justOpenedRef = useRef(true);
@@ -46,6 +48,7 @@ export const Chat: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<UiTag[]>([]);
   const [tagsLoading, setTagsLoading] = useState(false);
   const [tagsSavingId, setTagsSavingId] = useState<string | null>(null);
+  const [acceptingConversation, setAcceptingConversation] = useState(false);
 
   const {
     messages,
@@ -314,7 +317,7 @@ export const Chat: React.FC = () => {
         id: data.id,
         clinicId: (data as any).clinic_id ?? undefined,
         channel: data.channel as Channel,
-        status: data.status,
+        status: (data.status as Conversation["status"]) ?? "pending",
         contactName:
           contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
         contactNumber: contactRow?.phone ?? "",
@@ -391,6 +394,34 @@ export const Chat: React.FC = () => {
       supabase.removeChannel(channel);
     };
   }, [conversation?.id, reloadConversationTags]);
+
+  const handleAcceptConversation = useCallback(async () => {
+    if (!id || !authUser) return;
+
+    setAcceptingConversation(true);
+
+    const { error } = await supabase
+      .from("conversations")
+      .update({ assigned_user_id: authUser.id, status: "open" })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Erro ao aceitar conversa:", error);
+      setAcceptingConversation(false);
+      return;
+    }
+
+    setConversation((prev) =>
+      prev
+        ? {
+            ...prev,
+            assignedTo: authUser.id,
+            status: "open",
+          }
+        : prev,
+    );
+    setAcceptingConversation(false);
+  }, [authUser, id]);
 
   const addTagToConversation = async (
     conversationId: string,
@@ -594,6 +625,12 @@ export const Chat: React.FC = () => {
         conversation={conversation}
         onBack={() => navigate("/inbox")}
         onManageTags={() => setIsManageTagsOpen(true)}
+        onAccept={handleAcceptConversation}
+        acceptDisabled={
+          acceptingConversation ||
+          !authUser ||
+          conversation.status !== "pending"
+        }
       />
 
       {/* Área de Mensagens */}
