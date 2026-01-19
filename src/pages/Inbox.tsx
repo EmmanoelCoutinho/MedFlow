@@ -97,6 +97,7 @@ export const Inbox: React.FC = () => {
       extraPaths: ["/inbox/chat"],
     },
     { label: "Carteira de contatos", icon: UsersIcon },
+    { label: "Atendentes", icon: UsersIcon, path: "/inbox/attendants" },
     { label: "Departamentos", icon: Building2Icon, path: "/inbox/departments" },
     { label: "Etiquetas", icon: TagIcon, path: "/inbox/tags" },
     { label: "Bots", icon: BotIcon },
