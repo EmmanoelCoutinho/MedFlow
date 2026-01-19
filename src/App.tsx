@@ -15,6 +15,7 @@ import { Tags } from "./pages/Tags";
 import { ReactNode } from "react";
 import { ClinicProvider } from "./contexts/ClinicContext";
 import { DepartmentsPage } from "./pages/DepartmentsPage";
+import { AttendantsPage } from "./pages/AttendantsPage";
 
 type RequireAuthProps = {
   children: ReactNode;
@@ -77,6 +78,7 @@ function RoutedApp() {
             <Route path="chat/:id" element={<Chat />} />
             <Route path="tags" element={<Tags />} />
             <Route path="departments" element={<DepartmentsPage />} />
+            <Route path="attendants" element={<AttendantsPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
