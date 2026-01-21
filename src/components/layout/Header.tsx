@@ -1,15 +1,15 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import logo from '../../assets/logo-unxet.png';
-import { useAuth } from '../../contexts/AuthContext';
-import { useClinic } from '../../contexts/ClinicContext';
+﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import logo from "../../assets/logo-unxet.png";
+import { useAuth } from "../../contexts/AuthContext";
+import { useClinic } from "../../contexts/ClinicContext";
 
 function getInitials(name: string) {
   return name
     .split(/\s+/)
     .filter(Boolean)
-    .map((n) => n[0] || '')
-    .join('')
+    .map((n) => n[0] || "")
+    .join("")
     .toUpperCase()
     .slice(0, 2);
 }
@@ -19,7 +19,10 @@ export const Header = () => {
   const navigate = useNavigate();
   const { clinic } = useClinic();
 
-  const initials = useMemo(() => getInitials(profile?.name || ''), [profile?.name]);
+  const initials = useMemo(
+    () => getInitials(profile?.name || ""),
+    [profile?.name],
+  );
 
   const [open, setOpen] = useState(false);
 
@@ -38,18 +41,19 @@ export const Header = () => {
       const target = e.target as Node | null;
       if (
         target &&
-        (menuRef.current?.contains(target) || buttonRef.current?.contains(target))
+        (menuRef.current?.contains(target) ||
+          buttonRef.current?.contains(target))
       ) {
         return;
       }
       setOpen(false);
     };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
 
   return (
-    <header className="w-full border-b border-[#E5E7EB] bg-white fixed top-0 h-16 z-50">
+    <header className="w-full border-b border-[#E5E7EB] bg-white fixed top-0 h-16 z-10">
       <div className="mx-auto max-w-7xl px-4 h-full flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/inbox" className="flex items-center gap-2 select-none">
@@ -71,7 +75,7 @@ export const Header = () => {
             <div
               ref={menuRef}
               role="menu"
-              className="absolute right-0 mt-2 w-64 rounded-lg border border-[#E5E7EB] bg-white shadow-lg z-50 overflow-hidden"
+              className="absolute right-0 -bottom-56 mt-2 w-64 rounded-lg border border-[#E5E7EB] bg-white shadow-lg z-50 overflow-hidden"
             >
               <div className="px-4 py-3 bg-[#F9FAFB]">
                 <div className="text-sm text-gray-500">Conta</div>
@@ -105,10 +109,9 @@ export const Header = () => {
               </div>
             </div>
           )}
-        <span>{clinic?.name}</span>
+          <span>{clinic?.name}</span>
         </div>
       </div>
     </header>
   );
 };
-

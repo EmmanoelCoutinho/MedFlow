@@ -9,6 +9,7 @@ import {
   TagIcon,
   UsersIcon,
 } from "lucide-react";
+import { FiBookOpen } from "react-icons/fi";
 
 import { Input } from "../components/ui/Input";
 import { Badge } from "../components/ui/Badge";
@@ -96,7 +97,7 @@ export const Inbox: React.FC = () => {
       path: "/inbox",
       extraPaths: ["/inbox/chat"],
     },
-    { label: "Carteira de contatos", icon: UsersIcon },
+    { label: "Carteira de contatos", icon: FiBookOpen },
     { label: "Atendentes", icon: UsersIcon, path: "/inbox/attendants" },
     { label: "Departamentos", icon: Building2Icon, path: "/inbox/departments" },
     { label: "Etiquetas", icon: TagIcon, path: "/inbox/tags" },

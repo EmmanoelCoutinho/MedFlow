@@ -16,6 +16,8 @@ import { ReactNode } from "react";
 import { ClinicProvider } from "./contexts/ClinicContext";
 import { DepartmentsPage } from "./pages/DepartmentsPage";
 import { AttendantsPage } from "./pages/AttendantsPage";
+import { AuthCallback } from "./pages/Callback";
+import { SetPassword } from "./pages/SetPassword";
 
 type RequireAuthProps = {
   children: ReactNode;
@@ -66,6 +68,9 @@ function RoutedApp() {
       >
         <Routes>
           <Route path="/login" element={<Login />} />
+
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/auth/set-password" element={<SetPassword />} />
           <Route
             path="/inbox"
             element={

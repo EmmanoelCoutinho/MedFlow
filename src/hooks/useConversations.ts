@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import type { Conversation, Channel, Tag } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+import type { Conversation, Channel, Tag } from "../types";
+import { useAuth } from "../contexts/AuthContext";
 import { useClinic } from "../contexts/ClinicContext";
 
 type UseConversationsOptions = {
@@ -21,22 +21,22 @@ type DbMessage = {
   payload?: any;
 };
 
-const LAST_OPENED_STORAGE_KEY = 'conversation-last-opened';
+const LAST_OPENED_STORAGE_KEY = "conversation-last-opened";
 
 const readLastOpenedAt = (): Record<string, number> => {
-  if (typeof window === 'undefined') return {};
+  if (typeof window === "undefined") return {};
   try {
     const raw = window.localStorage.getItem(LAST_OPENED_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
   } catch {
     return {};
   }
 };
 
 const writeLastOpenedAt = (map: Record<string, number>) => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(LAST_OPENED_STORAGE_KEY, JSON.stringify(map));
   } catch {
@@ -46,7 +46,7 @@ const writeLastOpenedAt = (map: Record<string, number>) => {
 
 export const persistConversationOpenedAt = (
   conversationId: string,
-  timestamp = Date.now()
+  timestamp = Date.now(),
 ) => {
   const current = readLastOpenedAt();
   const next = { ...current, [conversationId]: timestamp };
@@ -57,13 +57,12 @@ export const persistConversationOpenedAt = (
 export function useConversations(options: UseConversationsOptions = {}) {
   const { authUser, loading: authLoading } = useAuth();
   const { clinicId, membership } = useClinic();
-  const departmentId = membership?.department_id ?? null;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<any>(null);
-  const [lastOpenedAt, setLastOpenedAt] = useState<Record<string, number>>(
-    () => readLastOpenedAt()
+  const [lastOpenedAt, setLastOpenedAt] = useState<Record<string, number>>(() =>
+    readLastOpenedAt(),
   );
   const lastOpenedAtRef = useRef(lastOpenedAt);
   const lastRefetchAtRef = useRef(0);
@@ -75,7 +74,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
   const parsePayload = (raw: any) => {
     if (!raw) return {};
-    if (typeof raw === 'string') {
+    if (typeof raw === "string") {
       try {
         return JSON.parse(raw);
       } catch {
@@ -87,14 +86,12 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
   const detectMediaType = (
     msg?: { type?: string | null; payload?: any },
-    payload?: any
-  ): Conversation['lastMessageType'] => {
+    payload?: any,
+  ): Conversation["lastMessageType"] => {
     const parsedPayload = payload ?? parsePayload(msg?.payload);
     const directType = msg?.type ?? parsedPayload?.type;
     const candidate =
-      parsedPayload?.message ??
-      parsedPayload?.messages?.[0] ??
-      parsedPayload;
+      parsedPayload?.message ?? parsedPayload?.messages?.[0] ?? parsedPayload;
 
     const hasMedia = (key: string) =>
       directType === key ||
@@ -102,14 +99,14 @@ export function useConversations(options: UseConversationsOptions = {}) {
       parsedPayload?.[key] ||
       parsedPayload?.data?.[key];
 
-    if (hasMedia('image')) return 'image';
-    if (hasMedia('audio')) return 'audio';
-    if (hasMedia('sticker')) return 'sticker';
-    if (hasMedia('video')) return 'video';
-    if (hasMedia('document')) return 'document';
+    if (hasMedia("image")) return "image";
+    if (hasMedia("audio")) return "audio";
+    if (hasMedia("sticker")) return "sticker";
+    if (hasMedia("video")) return "video";
+    if (hasMedia("document")) return "document";
 
-    if (directType) return directType as Conversation['lastMessageType'];
-    return 'text';
+    if (directType) return directType as Conversation["lastMessageType"];
+    return "text";
   };
 
   const getPreview = (msg?: {
@@ -118,31 +115,52 @@ export function useConversations(options: UseConversationsOptions = {}) {
     payload?: any;
   }) => {
     if (!msg) {
-      return { text: '', type: 'text' as Conversation['lastMessageType'] };
+      return { text: "", type: "text" as Conversation["lastMessageType"] };
     }
 
     const payload = parsePayload(msg.payload);
     const kind = detectMediaType(msg, payload);
-    const text = msg.text ?? '';
+    const text = msg.text ?? "";
 
     const fallback =
-      kind === 'image'
-        ? 'Imagem'
-        : kind === 'audio'
-        ? 'Audio'
-        : kind === 'sticker'
-        ? 'Figurinha'
-        : kind === 'video'
-        ? 'Video'
-        : kind === 'document'
-        ? 'Documento'
-        : 'Mensagem';
+      kind === "image"
+        ? "Imagem"
+        : kind === "audio"
+          ? "Audio"
+          : kind === "sticker"
+            ? "Figurinha"
+            : kind === "video"
+              ? "Video"
+              : kind === "document"
+                ? "Documento"
+                : "Mensagem";
 
     return {
       text: text || fallback,
       type: kind,
     };
   };
+
+  const getAccessibleDepartmentIds = useCallback(async (): Promise<
+    string[]
+  > => {
+    if (!clinicId || !authUser) return [];
+
+    // 1) tenta multi-setor via department_members
+    const { data, error } = await supabase
+      .from("department_members")
+      .select("department_id")
+      .eq("clinic_user_id", authUser.id);
+
+    if (!error) {
+      const ids = (data ?? []).map((r: any) => r.department_id).filter(Boolean);
+
+      if (ids.length > 0) return ids;
+    }
+
+    // 2) fallback: setor principal do membership (single)
+    return membership?.department_id ? [membership.department_id] : [];
+  }, [authUser, clinicId, membership?.department_id]);
 
   const fetchConversations = useCallback(async () => {
     if (!authUser) {
@@ -151,7 +169,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
       return;
     }
 
-    if (!clinicId || !departmentId) {
+    if (!clinicId) {
       setConversations([]);
       setLoading(false);
       return;
@@ -160,136 +178,181 @@ export function useConversations(options: UseConversationsOptions = {}) {
     setLoading(true);
     setError(null);
 
-    let query = supabase
-      .from("conversations")
-      .select(
-        `
-        id,
-        status,
-        channel,
-        last_message_at,
-        created_at,
-        assigned_user_id,
-        contacts:contact_id (*),
-        messages (
-          id,
-          text,
-          sent_at,
-          direction,
-          type,
-          payload
-        ),
-        conversation_tags (
-          tag_id,
-          tags (
-            id,
-            name,
-            color
-          )
-        )
-
-      `
-      )
-      .eq("clinic_id", clinicId)
-      .eq("department_id", departmentId)
-      .order("last_message_at", { ascending: false });
-
-      query = query.neq("status", "closed").eq("assigned_user_id", authUser.id);
-
-    if (options.status) {
-      query = query.eq('status', options.status);
-    }
-    if (options.channel) {
-      query = query.eq('channel', options.channel);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Erro ao buscar conversas:', error);
-      setError(error);
+    const accessibleDepartmentIds = await getAccessibleDepartmentIds();
+    if (accessibleDepartmentIds.length === 0) {
+      setConversations([]);
       setLoading(false);
       return;
     }
 
-    const mapped: Conversation[] =
-      data?.map((row: any) => {
-        const messages =
-          (row.messages as {
-            id: string;
-            text: string | null;
-            sent_at: string | null;
-            direction: string | null;
-            type?: string | null;
-            payload?: any;
-          }[]) ?? [];
+    const baseSelect = `
+    id,
+    status,
+    channel,
+    last_message_at,
+    created_at,
+    assigned_user_id,
+    contacts:contact_id (*),
+    messages (
+      id,
+      text,
+      sent_at,
+      direction,
+      type,
+      payload
+    ),
+    conversation_tags (
+      tag_id,
+      tags (
+        id,
+        name,
+        color
+      )
+    )
+  `;
 
-        const last = messages
-          .slice()
-          .sort(
-            (a, b) =>
-              new Date(b.sent_at ?? 0).getTime() -
-              new Date(a.sent_at ?? 0).getTime()
-          )[0];
+    const makeBase = () =>
+      supabase
+        .from("conversations")
+        .select(baseSelect)
+        .eq("clinic_id", clinicId)
+        .in("department_id", accessibleDepartmentIds)
+        .neq("status", "closed")
+        .order("last_message_at", { ascending: false });
 
-        const preview = getPreview(last);
+    // filtro opcional de canal
+    const applyChannel = (q: any) =>
+      options.channel ? q.eq("channel", options.channel) : q;
 
-        const rawContacts: any = row.contacts;
-        const contactRow = Array.isArray(rawContacts)
-          ? rawContacts[0]
-          : rawContacts;
-        const contactAvatar =
-          contactRow?.avatar ??
-          contactRow?.avatar_url ??
-          contactRow?.photo_url ??
-          contactRow?.profile_pic_url ??
-          contactRow?.image_url;
+    try {
+      let data: any[] = [];
 
-        const ct = (row.conversation_tags as any[]) ?? [];
-        const tags: Tag[] = ct
-          .map((x) => x.tags)
-          .flat()
-          .filter(Boolean)
-          .map((t: any) => ({
-            id: t.id,
-            name: t.name,
-            color: t.color ?? "#0A84FF",
-          }));
+      // Se a tela passar status explicitamente, respeita.
+      if (options.status) {
+        let q = applyChannel(makeBase()).eq("status", options.status);
 
+        // regra: open sempre atribuída ao usuário logado
+        if (options.status === "open") {
+          q = q.eq("assigned_user_id", authUser.id);
+        }
 
-        const lastTime = new Date(
-          last?.sent_at ?? row.last_message_at ?? 0
-        ).getTime();
-        const openedAt = lastOpenedAtRef.current[row.id];
-        const isUnread =
-          last?.direction === 'inbound' &&
-          (!openedAt || lastTime > openedAt);
+        // (opcional) pending só não atribuídas:
+        // if (options.status === "pending") q = q.is("assigned_user_id", null);
 
-        return {
-          id: row.id,
-          channel: row.channel as Channel,
-          status: row.status,
+        const res = await q;
+        if (res.error) throw res.error;
+        data = res.data ?? [];
+      } else {
+        // padrão: retorna open atribuídas + pending dos setores acessíveis
+        const [openRes, pendingRes] = await Promise.all([
+          applyChannel(makeBase())
+            .eq("status", "open")
+            .eq("assigned_user_id", authUser.id),
 
-          contactName:
-            contactRow?.name ??
-            contactRow?.phone ??
-            'Contato sem nome',
-          contactNumber: contactRow?.phone ?? '',
-          contactAvatar: contactAvatar ?? undefined,
+          applyChannel(makeBase()).eq("status", "pending"),
+          // (opcional) só não atribuídas:
+          // .is("assigned_user_id", null),
+        ]);
 
-          lastMessage: preview.text,
-          lastMessageType: preview.type,
-          lastTimestamp: last?.sent_at ?? row.last_message_at ?? '',
-          unreadCount: isUnread ? 1 : 0,
+        if (openRes.error) throw openRes.error;
+        if (pendingRes.error) throw pendingRes.error;
 
-          tags,
-          assignedTo: row.assigned_user_id ?? undefined,
-        };
-      }) ?? [];
+        // merge sem duplicar
+        const map = new Map<string, any>();
+        (openRes.data ?? []).forEach((r: any) => map.set(r.id, r));
+        (pendingRes.data ?? []).forEach((r: any) => map.set(r.id, r));
+        data = Array.from(map.values());
 
-    setConversations(mapped);
-    setLoading(false);
-  }, [authUser, options.status, options.channel, clinicId, departmentId]);
+        // ordena por last_message_at desc
+        data.sort(
+          (a, b) =>
+            new Date(b.last_message_at ?? 0).getTime() -
+            new Date(a.last_message_at ?? 0).getTime(),
+        );
+      }
+
+      // ✅ daqui pra baixo pode manter seu mapping EXATAMENTE como está hoje
+      const mapped: Conversation[] =
+        data?.map((row: any) => {
+          // ... SEU MAPPING ATUAL (messages, preview, tags, unreadCount etc)
+          // (mantém tudo igual)
+          const messages = (row.messages as any[]) ?? [];
+
+          const last = messages
+            .slice()
+            .sort(
+              (a, b) =>
+                new Date(b.sent_at ?? 0).getTime() -
+                new Date(a.sent_at ?? 0).getTime(),
+            )[0];
+
+          const preview = getPreview(last);
+
+          const rawContacts: any = row.contacts;
+          const contactRow = Array.isArray(rawContacts)
+            ? rawContacts[0]
+            : rawContacts;
+
+          const contactAvatar =
+            contactRow?.avatar ??
+            contactRow?.avatar_url ??
+            contactRow?.photo_url ??
+            contactRow?.profile_pic_url ??
+            contactRow?.image_url;
+
+          const ct = (row.conversation_tags as any[]) ?? [];
+          const tags: Tag[] = ct
+            .map((x) => x.tags)
+            .flat()
+            .filter(Boolean)
+            .map((t: any) => ({
+              id: t.id,
+              name: t.name,
+              color: t.color ?? "#0A84FF",
+            }));
+
+          const lastTime = new Date(
+            last?.sent_at ?? row.last_message_at ?? 0,
+          ).getTime();
+          const openedAt = lastOpenedAtRef.current[row.id];
+          const isUnread =
+            last?.direction === "inbound" && (!openedAt || lastTime > openedAt);
+
+          return {
+            id: row.id,
+            channel: row.channel as Channel,
+            status: row.status,
+
+            contactName:
+              contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
+            contactNumber: contactRow?.phone ?? "",
+            contactAvatar: contactAvatar ?? undefined,
+
+            lastMessage: preview.text,
+            lastMessageType: preview.type,
+            lastTimestamp: last?.sent_at ?? row.last_message_at ?? "",
+            unreadCount: isUnread ? 1 : 0,
+
+            tags,
+            assignedTo: row.assigned_user_id ?? undefined,
+          };
+        }) ?? [];
+
+      setConversations(mapped);
+    } catch (err: any) {
+      console.error("Erro ao buscar conversas:", err);
+      setError(err);
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    authUser,
+    clinicId,
+    getAccessibleDepartmentIds,
+    options.status,
+    options.channel,
+  ]);
 
   const scheduleRefetch = useCallback(() => {
     const cooldownMs = 2500;
@@ -365,7 +428,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
           console.log("[RT] tags alteradas na conversa", conversationId);
           reloadTagForConversation(conversationId);
-        }
+        },
       )
       .subscribe((status) => {
         console.log("[RT] conversation_tags channel status:", status);
@@ -375,7 +438,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
       supabase.removeChannel(channel);
     };
   }, [authUser, scheduleRefetch]);
-
 
   // carregamento inicial + quando mudar filtro (status/canal)
   useEffect(() => {
@@ -402,13 +464,13 @@ export function useConversations(options: UseConversationsOptions = {}) {
     }
 
     const channel = supabase
-      .channel('inbox-conversations-realtime')
+      .channel("inbox-conversations-realtime")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
           // se quiser deixar mais parecido ainda com o useMessages,
           // voce poderia depois colocar um filter aqui, mas nao e obrigatorio:
           // filter: '...',
@@ -417,12 +479,10 @@ export function useConversations(options: UseConversationsOptions = {}) {
           const msg = payload.new as DbMessage;
           if (!msg) return;
 
-          console.log('[RT] nova mensagem para conversa', msg.conversation_id);
+          console.log("[RT] nova mensagem para conversa", msg.conversation_id);
 
           setConversations((current) => {
-            const idx = current.findIndex(
-              (c) => c.id === msg.conversation_id
-            );
+            const idx = current.findIndex((c) => c.id === msg.conversation_id);
             if (idx === -1) {
               // conversa nao esta na lista (pode nao ser "open" ou nao bater o filtro)
               scheduleRefetch();
@@ -431,7 +491,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
             const old = current[idx];
 
-            const isInbound = msg.direction === 'inbound';
+            const isInbound = msg.direction === "inbound";
 
             const preview = getPreview(msg as any);
 
@@ -456,15 +516,15 @@ export function useConversations(options: UseConversationsOptions = {}) {
             clone.sort(
               (a, b) =>
                 new Date(b.lastTimestamp ?? 0).getTime() -
-                new Date(a.lastTimestamp ?? 0).getTime()
+                new Date(a.lastTimestamp ?? 0).getTime(),
             );
 
             return clone;
           });
-        }
+        },
       )
       .subscribe((status) => {
-        console.log('[RT] conversations channel status:', status);
+        console.log("[RT] conversations channel status:", status);
       });
 
     return () => {
@@ -481,8 +541,8 @@ export function useConversations(options: UseConversationsOptions = {}) {
     });
     setConversations((current) =>
       current.map((c) =>
-        c.id === conversationId ? { ...c, unreadCount: 0 } : c
-      )
+        c.id === conversationId ? { ...c, unreadCount: 0 } : c,
+      ),
     );
   }, []);
 

@@ -22,6 +22,8 @@ type ClinicUser = {
   name: string | null;
   department_id: string | null;
   email?: string | null;
+  invited_at?: string | null;
+  accepted_at?: string | null;
 };
 
 type Department = {
@@ -54,7 +56,7 @@ type ActionError = {
 
 type RoleFilter = "all" | Role;
 
-type ModalMode = "edit" | "remove";
+type ModalMode = "edit" | "remove" | "invite";
 
 const buildToast = (message: string, type: Toast["type"]) => ({
   id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -62,13 +64,11 @@ const buildToast = (message: string, type: Toast["type"]) => ({
   type,
 });
 
-const isPermissionError = (error: { status?: number; code?: string } | null) => {
+const isPermissionError = (
+  error: { status?: number; code?: string } | null,
+) => {
   if (!error) return false;
-  return (
-    error.status === 401 ||
-    error.status === 403 ||
-    error.code === "42501"
-  );
+  return error.status === 401 || error.status === 403 || error.code === "42501";
 };
 
 const useToasts = () => {
@@ -104,9 +104,7 @@ const StatusBadge: React.FC<{ status: "active" | "inactive" }> = ({
   </Badge>
 );
 
-const Divider: React.FC = () => (
-  <div className="h-px w-full bg-gray-100" />
-);
+const Divider: React.FC = () => <div className="h-px w-full bg-gray-100" />;
 
 const ToastList: React.FC<{ toasts: Toast[] }> = ({ toasts }) => (
   <div className="fixed right-6 top-20 z-50 flex flex-col gap-3">
@@ -221,6 +219,15 @@ export const AttendantsPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
 
+  // Invite (novo)
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState<Role>("agent");
+  const [inviteDepartmentId, setInviteDepartmentId] = useState<string | null>(
+    null,
+  );
+  const [isInviting, setIsInviting] = useState(false);
+
   const { toasts, pushToast } = useToasts();
 
   const departmentsById = useMemo(() => {
@@ -244,8 +251,7 @@ export const AttendantsPage: React.FC = () => {
         user.user_id.toLowerCase().includes(query);
       const matchesRole = roleFilter === "all" || user.role === roleFilter;
       const matchesDepartment =
-        departmentFilter === "all" ||
-        user.department_id === departmentFilter;
+        departmentFilter === "all" || user.department_id === departmentFilter;
       return matchesSearch && matchesRole && matchesDepartment;
     });
   }, [clinicUsers, departmentFilter, roleFilter, search]);
@@ -285,7 +291,9 @@ export const AttendantsPage: React.FC = () => {
 
     const { data, error: fetchError } = await supabase
       .from("clinic_users")
-      .select("clinic_id, user_id, role, name, department_id")
+      .select(
+        "clinic_id, user_id, role, name, department_id, email, invited_at, accepted_at",
+      )
       .eq("clinic_id", clinicId)
       .order("role", { ascending: false })
       .order("name", { ascending: true, nullsFirst: false });
@@ -294,7 +302,6 @@ export const AttendantsPage: React.FC = () => {
       throw fetchError;
     }
 
-    // Caso exista uma view/RPC que exponha email, mapeie aqui.
     return (data ?? []) as ClinicUser[];
   }, [clinicId]);
 
@@ -452,7 +459,13 @@ export const AttendantsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [clinicId, countAdmins, fetchClinicUsers, fetchDepartments, fetchDepartmentMembers]);
+  }, [
+    clinicId,
+    countAdmins,
+    fetchClinicUsers,
+    fetchDepartments,
+    fetchDepartmentMembers,
+  ]);
 
   useEffect(() => {
     refreshData();
@@ -470,6 +483,10 @@ export const AttendantsPage: React.FC = () => {
   const handleCloseModal = () => {
     setActiveModal(null);
     setEditingUser(null);
+    setInviteEmail("");
+    setInviteName("");
+    setInviteRole("agent");
+    setInviteDepartmentId(null);
   };
 
   const handleRoleChange = (value: Role) => {
@@ -577,6 +594,53 @@ export const AttendantsPage: React.FC = () => {
     }
   };
 
+  // Invite (novo)
+  const handleOpenInvite = () => {
+    setActiveModal("invite");
+  };
+
+  const handleInvite = async () => {
+    if (!clinicId) return;
+
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) {
+      pushToast(buildToast("Informe um email para enviar o convite", "error"));
+      return;
+    }
+
+    setIsInviting(true);
+    try {
+      const { error: inviteError } = await supabase.functions.invoke(
+        "invite-attendant",
+        {
+          body: {
+            clinic_id: clinicId,
+            email,
+            name: inviteName.trim() || null,
+            role: inviteRole,
+            department_id: inviteDepartmentId ?? null,
+            redirect_to: `${window.location.origin}/auth/callback`,
+          },
+        },
+      );
+
+      if (inviteError) {
+        throw inviteError;
+      }
+
+      pushToast(buildToast("Convite enviado com sucesso", "success"));
+      await refreshData();
+      handleCloseModal();
+    } catch (inviteErr: any) {
+      handleActionError({
+        message: inviteErr.message ?? "Erro ao enviar convite",
+        isPermission: isPermissionError(inviteErr),
+      });
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-1 flex-col bg-gray-50">
       <ToastList toasts={toasts} />
@@ -600,10 +664,11 @@ export const AttendantsPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={refreshData}
-              className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-gray-300"
+              onClick={handleOpenInvite}
+              className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+              disabled={!isAdmin}
             >
-              Atualizar
+              + Convidar atendente
             </button>
           </div>
         </div>
@@ -630,7 +695,9 @@ export const AttendantsPage: React.FC = () => {
                 <div className="relative mt-1">
                   <select
                     value={roleFilter}
-                    onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
+                    onChange={(e) =>
+                      setRoleFilter(e.target.value as RoleFilter)
+                    }
                     className="w-36 appearance-none rounded-full border border-gray-200 bg-white px-3 py-2 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   >
                     <option value="all">Todos</option>
@@ -687,14 +754,15 @@ export const AttendantsPage: React.FC = () => {
           </div>
         ) : filteredUsers.length === 0 ? (
           <EmptyState
-            onAction={() =>
-              pushToast(
-                buildToast(
-                  "Convites são enviados pelo painel administrativo.",
-                  "info",
-                ),
-              )
-            }
+            onAction={() => {
+              if (!isAdmin) {
+                pushToast(
+                  buildToast("Você não tem permissão para esta ação", "error"),
+                );
+                return;
+              }
+              handleOpenInvite();
+            }}
           />
         ) : (
           <div className="space-y-3">
@@ -748,7 +816,7 @@ export const AttendantsPage: React.FC = () => {
                   <div className="col-span-1">
                     <StatusBadge status="active" />
                   </div>
-                  <div className="col-span-1 flex justify-end">
+                  <div className="col-span-1 flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => handleOpenEdit(user)}
@@ -766,11 +834,7 @@ export const AttendantsPage: React.FC = () => {
       </div>
 
       <Modal
-        title={
-          activeModal === "remove"
-            ? "Remover acesso"
-            : "Editar atendente"
-        }
+        title={activeModal === "remove" ? "Remover acesso" : "Editar atendente"}
         description={
           editingUser
             ? `Gerencie permissões e vínculos para ${
@@ -917,6 +981,85 @@ export const AttendantsPage: React.FC = () => {
               className="inline-flex items-center gap-2 rounded-full bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-rose-400"
             >
               {isRemoving ? "Removendo..." : "Remover acesso"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        title="Convidar atendente"
+        description="Envia um email para a pessoa criar a senha e acessar a clínica."
+        isOpen={activeModal === "invite"}
+        onClose={handleCloseModal}
+      >
+        <div className="space-y-4">
+          <label className="text-sm font-medium text-gray-700">
+            Email
+            <Input
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="email@empresa.com"
+              className="mt-2"
+            />
+          </label>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">
+              Nome (opcional)
+              <Input
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Nome do atendente"
+                className="mt-2"
+              />
+            </label>
+
+            <label className="text-sm font-medium text-gray-700">
+              Role
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as Role)}
+                disabled={!isAdmin}
+                className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50"
+              >
+                <option value="admin">Admin</option>
+                <option value="agent">Atendente</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="text-sm font-medium text-gray-700">
+            Setor principal (opcional)
+            <select
+              value={inviteDepartmentId ?? ""}
+              onChange={(e) => setInviteDepartmentId(e.target.value || null)}
+              disabled={!isAdmin}
+              className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50"
+            >
+              <option value="">Sem setor</option>
+              {activeDepartments.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleCloseModal}
+              className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-gray-300"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleInvite}
+              disabled={!isAdmin || isInviting}
+              className="rounded-full bg-gray-900 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+            >
+              {isInviting ? "Enviando..." : "Enviar convite"}
             </button>
           </div>
         </div>
