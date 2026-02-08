@@ -18,6 +18,8 @@ import { DepartmentsPage } from "./pages/DepartmentsPage";
 import { AttendantsPage } from "./pages/AttendantsPage";
 import { AuthCallback } from "./pages/Callback";
 import { SetPassword } from "./pages/SetPassword";
+import { MetaIntegrationsPage } from "./pages/IntegrationsMetaPage";
+import { MetaCallbackPage } from "./pages/IntegrationCallbackPage";
 
 type RequireAuthProps = {
   children: ReactNode;
@@ -84,6 +86,14 @@ function RoutedApp() {
             <Route path="tags" element={<Tags />} />
             <Route path="departments" element={<DepartmentsPage />} />
             <Route path="attendants" element={<AttendantsPage />} />
+            <Route
+              path="settings/integrations/meta"
+              element={<MetaIntegrationsPage />}
+            />
+            <Route
+              path="settings/integrations/meta/callback"
+              element={<MetaCallbackPage />}
+            />
           </Route>
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>

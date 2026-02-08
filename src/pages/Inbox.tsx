@@ -8,7 +8,9 @@ import {
   MessageSquareTextIcon,
   TagIcon,
   UsersIcon,
+  Settings2Icon,
 } from "lucide-react";
+
 import { FiBookOpen } from "react-icons/fi";
 
 import { Input } from "../components/ui/Input";
@@ -165,6 +167,25 @@ export const Inbox: React.FC = () => {
               </button>
             );
           })}
+          <div className="p-2 absolute bottom-0 left-0">
+            <button
+              type="button"
+              onClick={() => navigate("/inbox/settings/integrations/meta")}
+              className={[
+                "w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+                "justify-center group-hover:justify-start",
+                location.pathname.startsWith("/inbox/settings")
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+              ].join(" ")}
+              title="Configurações"
+            >
+              <Settings2Icon className="h-5 w-5 flex-shrink-0" />
+              <span className="whitespace-nowrap overflow-hidden max-w-0 group-hover:max-w-[220px] opacity-0 group-hover:opacity-100 transition-all duration-200">
+                Configurações
+              </span>
+            </button>
+          </div>
         </nav>
       </aside>
 
