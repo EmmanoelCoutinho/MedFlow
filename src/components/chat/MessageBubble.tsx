@@ -1,4 +1,3 @@
-// src/components/chat/MessageBubble.tsx
 import React, { useState } from 'react';
 import { DownloadIcon, FileIcon } from 'lucide-react';
 import type { Message as UiMessage } from '../../types';
@@ -82,6 +81,14 @@ const getDocumentAccentClass = (label: string) => {
   }
 };
 
+const filenameExtRegex = /\.[A-Za-z0-9]{1,6}$/;
+
+const parseFilenameFromDocumentText = (text?: string): string | undefined => {
+  const t = text?.trim();
+  if (!t || !filenameExtRegex.test(t)) return undefined;
+  return t;
+};
+
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   contactAvatar,
@@ -92,7 +99,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const initials = getInitials(contactName);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
-  // Preferimos sempre o que veio já mapeado
   const mediaUrl =
     message.mediaUrl ??
     (payload?.image?.url ||
@@ -130,7 +136,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.document;
 
   const documentFilename =
-    message.filename ?? documentData?.filename ?? documentData?.name ?? undefined;
+    message.filename ??
+    documentData?.filename ??
+    documentData?.name ??
+    (mediaType === 'document' ? parseFilenameFromDocumentText(message.text) : undefined);
 
   const documentFileSize =
     message.fileSize ??
@@ -148,8 +157,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     : documentLabel;
   const documentAccentClass = getDocumentAccentClass(documentLabel);
   const hasMedia = Boolean(mediaUrl);
-
-  // Se for apenas áudio, sem texto/legenda, queremos tirar a caixa externa
   const onlyAudio =
     mediaType === 'audio' && (!displayText || !displayText.trim());
   const onlyDocument =
@@ -188,7 +195,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         <div className="flex flex-col">
           <div className={bubbleClass}>
-            {/* Mídias */}
             {mediaUrl && (
               <>
                 {mediaType === 'image' && (
@@ -260,7 +266,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </>
             )}
 
-            {/* Texto / legenda: só mostra se não for o caso de "somente áudio" */}
             {displayText && !onlyAudio ? (
               <p className="text-sm">{displayText}</p>
             ) : null}

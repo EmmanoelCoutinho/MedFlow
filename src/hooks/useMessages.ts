@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useState } from "react";
 import type { Message as UiMessage } from "../types";
 import { supabase } from "../lib/supabaseClient";
@@ -196,8 +194,29 @@ export function useMessages(conversationId: string | null) {
         (payload) => {
           const newMsg = mapDbMessage(payload.new as DbMessage);
           setMessages((current) => {
-            if (current.some((m) => m.id === newMsg.id)) return current;
-            return [...current, newMsg];
+            const hasPendingOptimistic = current.some((m) =>
+              String(m.id).startsWith("local-"),
+            );
+            if (
+              hasPendingOptimistic &&
+              newMsg.author === "atendente"
+            ) {
+              return current;
+            }
+            const existingIdx = current.findIndex((m) => m.id === newMsg.id);
+            if (existingIdx < 0) return [...current, newMsg];
+            const existing = current[existingIdx];
+            const merged: UiMessage = {
+              ...newMsg,
+              filename: newMsg.filename ?? existing.filename,
+              fileSize: newMsg.fileSize ?? existing.fileSize,
+              text:
+                newMsg.text ||
+                (existing.type === "document" && existing.filename
+                  ? existing.filename
+                  : existing.text),
+            };
+            return current.map((m, i) => (i === existingIdx ? merged : m));
           });
         },
       )

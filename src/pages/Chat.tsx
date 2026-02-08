@@ -1,4 +1,3 @@
-﻿// src/pages/Chat.tsx
 import React, {
   useEffect,
   useLayoutEffect,
@@ -31,6 +30,22 @@ type SendableInput =
       filename?: string;
       fileSize?: number;
     };
+
+function getMediaPreviewText(
+  type: "text" | "image" | "audio" | "document",
+  filename?: string,
+): string {
+  switch (type) {
+    case "image":
+      return "Imagem";
+    case "audio":
+      return "Áudio";
+    case "document":
+      return filename ?? "Documento";
+    default:
+      return "";
+  }
+}
 
 export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -304,14 +319,6 @@ export const Chat: React.FC = () => {
         ? rawContacts[0]
         : rawContacts;
 
-      const rawTags: any = data.conversation_tags?.[0]?.tags;
-      let tagName: string | undefined;
-      if (Array.isArray(rawTags)) {
-        tagName = rawTags[0]?.name;
-      } else {
-        tagName = rawTags?.name;
-      }
-
       const ct = (data.conversation_tags as any[]) ?? [];
       const tagsFromConv: UiTag[] = ct
         .map((row) => row?.tags)
@@ -380,7 +387,6 @@ export const Chat: React.FC = () => {
   useEffect(() => {
     if (!conversation?.id) return;
 
-    // carrega 1x
     reloadConversationTags(conversation.id);
 
     const channel = supabase
@@ -393,10 +399,7 @@ export const Chat: React.FC = () => {
           table: "conversation_tags",
           filter: `conversation_id=eq.${conversation.id}`,
         },
-        () => {
-          // sempre que inserir/remover, recarrega do banco (porque o payload não traz tags)
-          reloadConversationTags(conversation.id);
-        },
+        () => reloadConversationTags(conversation.id),
       )
       .subscribe();
 
@@ -472,7 +475,6 @@ export const Chat: React.FC = () => {
         setSelectedTags((prev) => [tag, ...prev]);
       }
 
-      // opcional: manter conversation.tag sincronizada com a primeira
       const nextFirst = !isSelected
         ? tag.name
         : selectedTags.filter((t) => t.id !== tag.id)[0]?.name;
@@ -484,7 +486,6 @@ export const Chat: React.FC = () => {
     }
   };
 
-  // Marca conversa como lida sempre que houver mensagens (incluindo novas em tempo real)
   useEffect(() => {
     if (!id || loadingMessages || messages.length === 0) return;
 
@@ -496,8 +497,6 @@ export const Chat: React.FC = () => {
     persistConversationOpenedAt(id, ts || Date.now());
   }, [id, messages, loadingMessages]);
 
-  // ===== Enviar mensagem (texto / imagem / áudio) =====
-  // Enviar mensagem (texto / imagem / áudio)
   const handleSendMessage = async (input: SendableInput) => {
     if (!id) return;
 
@@ -530,13 +529,7 @@ export const Chat: React.FC = () => {
       author: "atendente",
       text:
         bodyText ||
-        (outboundType === "image"
-          ? "🖼️ Imagem"
-          : outboundType === "audio"
-            ? "🎧 Áudio"
-            : outboundType === "document"
-              ? "📄 Documento"
-              : ""),
+        getMediaPreviewText(outboundType, filename),
       createdAt: new Date().toISOString(),
       type: outboundType,
       mediaUrl,
@@ -546,8 +539,6 @@ export const Chat: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, optimistic]);
-
-    // já rola pro fim ao enviar
     scrollToBottom("smooth");
 
     const { data, error } = await supabase.functions.invoke(
@@ -560,6 +551,7 @@ export const Chat: React.FC = () => {
           mediaUrl,
           mediaMimeType,
           filename,
+          fileSize,
         },
       },
     );
@@ -578,12 +570,7 @@ export const Chat: React.FC = () => {
           .update({ filename })
           .eq("id", inserted.id);
 
-        if (filenameError) {
-          console.warn(
-            "Não foi possível persistir o nome do documento:",
-            filenameError,
-          );
-        }
+        if (filenameError) console.warn("Persist filename failed:", filenameError);
       }
 
       const persisted: Message = mapDbMessage(inserted);
@@ -593,12 +580,19 @@ export const Chat: React.FC = () => {
         fileSize: persisted.fileSize ?? optimistic.fileSize,
         mediaUrl: persisted.mediaUrl ?? optimistic.mediaUrl,
         mediaMimeType: persisted.mediaMimeType ?? optimistic.mediaMimeType,
+        text:
+          persisted.text ||
+          getMediaPreviewText(outboundType, optimistic.filename),
       };
 
       setMessages((prev) => {
         const withoutTemp = prev.filter((m) => m.id !== tempId);
-        const alreadyExists = withoutTemp.some((m) => m.id === merged.id);
-        if (alreadyExists) return withoutTemp;
+        const idx = withoutTemp.findIndex((m) => m.id === merged.id);
+        if (idx >= 0) {
+          const next = [...withoutTemp];
+          next[idx] = { ...next[idx], ...merged };
+          return next;
+        }
         return [...withoutTemp, merged];
       });
 
