@@ -4,16 +4,19 @@ import React, {
   useState,
   useRef,
   useCallback,
+  useMemo,
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useClinic } from "../contexts/ClinicContext";
 import type { Conversation, Message, Channel } from "../types";
 import { useMessages, mapDbMessage } from "../hooks/useMessages";
+import { useConversationEvents } from "../hooks/useConversationEvents";
 import { persistConversationOpenedAt } from "../hooks/useConversations";
 import { Button } from "../components/ui/Button";
 import { ChatHeader } from "../components/chat/ChatHeader";
 import { MessageBubble } from "../components/chat/MessageBubble";
+import { SystemEventBubble } from "../components/chat/SystemEventBubble";
 import { MessageInput } from "../components/chat/MessageInput";
 import { ArrowDownIcon } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -50,7 +53,7 @@ function getMediaPreviewText(
 export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { authUser } = useAuth();
+  const { authUser, profile } = useAuth();
   const { clinicId, membership } = useClinic();
   const departmentId = membership?.department_id ?? null;
 
@@ -73,6 +76,29 @@ export const Chat: React.FC = () => {
     loading: loadingMessages,
     setMessages,
   } = useMessages(id ?? null);
+
+  const {
+    events,
+    loading: loadingEvents,
+    error: eventsError,
+  } = useConversationEvents(id ?? null);
+
+  const timelineItems = useMemo(() => {
+    const messageItems = messages.map((message) => ({
+      kind: "message" as const,
+      message,
+      sortAt: new Date(message.createdAt).getTime(),
+    }));
+    const eventItems = events.map((event) => ({
+      kind: "event" as const,
+      event,
+      sortAt: new Date(event.createdAt).getTime(),
+    }));
+
+    return [...messageItems, ...eventItems].sort((a, b) => a.sortAt - b.sortAt);
+  }, [messages, events]);
+
+  const loadingTimeline = loadingMessages || loadingEvents;
 
   // Quando trocar de conversa, resetar estado de scroll
   useEffect(() => {
@@ -150,8 +176,8 @@ export const Chat: React.FC = () => {
 
   // ===== SEMPRE ABRIR A CONVERSA NO FINAL =====
   useLayoutEffect(() => {
-    if (loadingMessages) return;
-    if (!messages.length) return;
+    if (loadingTimeline) return;
+    if (!timelineItems.length) return;
 
     // só auto-scroll na abertura da conversa
     if (!justOpenedRef.current) return;
@@ -171,7 +197,7 @@ export const Chat: React.FC = () => {
     setTimeout(() => {
       scrollToBottom("auto");
     }, 100);
-  }, [loadingMessages, messages.length, scrollToBottom]);
+  }, [loadingTimeline, timelineItems.length, scrollToBottom]);
 
   // ===== VER QUANDO MOSTRAR O BOTÃO "IR PRO FIM" =====
   const handleScrollCheck = useCallback(() => {
@@ -223,16 +249,16 @@ export const Chat: React.FC = () => {
     );
   }, []);
 
-  // Recalcula quando chegam novas mensagens
+  // Recalcula quando chegam novas entradas na timeline
   useEffect(() => {
     handleScrollCheck();
-  }, [messages.length, handleScrollCheck]);
+  }, [timelineItems.length, handleScrollCheck]);
 
   // Sempre joga o usuario para a ultima mensagem quando chegar/enviar nova
   useEffect(() => {
-    if (loadingMessages || messages.length === 0) return;
+    if (loadingTimeline || timelineItems.length === 0) return;
     scrollToBottom("auto");
-  }, [loadingMessages, messages.length, scrollToBottom]);
+  }, [loadingTimeline, timelineItems.length, scrollToBottom]);
 
   // Também atualiza estado ao rolar a página inteira
   useEffect(() => {
@@ -433,8 +459,26 @@ export const Chat: React.FC = () => {
           }
         : prev,
     );
+    const actorName =
+      profile?.name ?? authUser.user_metadata?.name ?? authUser.email ?? "Atendente";
+
+    const { error: logError } = await supabase
+      .from("conversation_events")
+      .insert({
+        conversation_id: id,
+        event_type: "conversation_accepted",
+        performed_by: authUser.id,
+        metadata: {
+          performed_by_name: actorName,
+        },
+      });
+
+    if (logError) {
+      console.warn("Erro ao registrar evento da conversa:", logError);
+    }
+
     setAcceptingConversation(false);
-  }, [authUser, id]);
+  }, [authUser, id, profile]);
 
   const addTagToConversation = async (
     conversationId: string,
@@ -643,23 +687,35 @@ export const Chat: React.FC = () => {
         onScroll={handleScrollCheck}
         className="h-full max-h-[70vh] overflow-y-auto p-4 space-y-4"
       >
-        {loadingMessages ? (
+        {eventsError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            Não foi possível carregar os logs do sistema.
+          </div>
+        )}
+        {loadingTimeline ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">Carregando mensagens...</p>
           </div>
-        ) : messages.length === 0 ? (
+        ) : timelineItems.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">Nenhuma mensagem ainda</p>
           </div>
         ) : (
           <>
-            {messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                contactName={conversation.contactName}
-              />
-            ))}
+            {timelineItems.map((item) =>
+              item.kind === "message" ? (
+                <MessageBubble
+                  key={`message-${item.message.id}`}
+                  message={item.message}
+                  contactName={conversation.contactName}
+                />
+              ) : (
+                <SystemEventBubble
+                  key={`event-${item.event.id}`}
+                  event={item.event}
+                />
+              ),
+            )}
           </>
         )}
       </div>
