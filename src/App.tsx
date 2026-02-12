@@ -104,7 +104,7 @@ function RoutedApp() {
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_relativeSplatPath: true }}>
       <AuthProvider>
         <ClinicProvider>
           <RoutedApp />

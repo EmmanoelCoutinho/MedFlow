@@ -45,6 +45,16 @@ export type Message = {
   caption?: string;
   createdAt: string;
 };
+
+export type ConversationEvent = {
+  id: string;
+  conversationId: string;
+  type: string;
+  createdAt: string;
+  performedBy?: string | null;
+  performedByName?: string | null;
+  metadata?: Record<string, any> | null;
+};
 export type Metrics = {
   avgFirstResponseMin: number;
   avgResolutionMin: number;

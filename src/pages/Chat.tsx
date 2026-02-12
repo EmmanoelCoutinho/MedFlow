@@ -1,20 +1,22 @@
-﻿// src/pages/Chat.tsx
 import React, {
   useEffect,
   useLayoutEffect,
   useState,
   useRef,
   useCallback,
+  useMemo,
 } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useClinic } from "../contexts/ClinicContext";
 import type { Conversation, Message, Channel } from "../types";
 import { useMessages, mapDbMessage } from "../hooks/useMessages";
+import { useConversationEvents } from "../hooks/useConversationEvents";
 import { persistConversationOpenedAt } from "../hooks/useConversations";
 import { Button } from "../components/ui/Button";
 import { ChatHeader } from "../components/chat/ChatHeader";
 import { MessageBubble } from "../components/chat/MessageBubble";
+import { SystemEventBubble } from "../components/chat/SystemEventBubble";
 import { MessageInput } from "../components/chat/MessageInput";
 import { ArrowDownIcon } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -32,10 +34,26 @@ type SendableInput =
       fileSize?: number;
     };
 
+function getMediaPreviewText(
+  type: "text" | "image" | "audio" | "document",
+  filename?: string,
+): string {
+  switch (type) {
+    case "image":
+      return "Imagem";
+    case "audio":
+      return "Áudio";
+    case "document":
+      return filename ?? "Documento";
+    default:
+      return "";
+  }
+}
+
 export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { authUser } = useAuth();
+  const { authUser, profile } = useAuth();
   const { clinicId, membership } = useClinic();
   const departmentId = membership?.department_id ?? null;
 
@@ -58,6 +76,29 @@ export const Chat: React.FC = () => {
     loading: loadingMessages,
     setMessages,
   } = useMessages(id ?? null);
+
+  const {
+    events,
+    loading: loadingEvents,
+    error: eventsError,
+  } = useConversationEvents(id ?? null);
+
+  const timelineItems = useMemo(() => {
+    const messageItems = messages.map((message) => ({
+      kind: "message" as const,
+      message,
+      sortAt: new Date(message.createdAt).getTime(),
+    }));
+    const eventItems = events.map((event) => ({
+      kind: "event" as const,
+      event,
+      sortAt: new Date(event.createdAt).getTime(),
+    }));
+
+    return [...messageItems, ...eventItems].sort((a, b) => a.sortAt - b.sortAt);
+  }, [messages, events]);
+
+  const loadingTimeline = loadingMessages || loadingEvents;
 
   // Quando trocar de conversa, resetar estado de scroll
   useEffect(() => {
@@ -135,8 +176,8 @@ export const Chat: React.FC = () => {
 
   // ===== SEMPRE ABRIR A CONVERSA NO FINAL =====
   useLayoutEffect(() => {
-    if (loadingMessages) return;
-    if (!messages.length) return;
+    if (loadingTimeline) return;
+    if (!timelineItems.length) return;
 
     // só auto-scroll na abertura da conversa
     if (!justOpenedRef.current) return;
@@ -156,7 +197,7 @@ export const Chat: React.FC = () => {
     setTimeout(() => {
       scrollToBottom("auto");
     }, 100);
-  }, [loadingMessages, messages.length, scrollToBottom]);
+  }, [loadingTimeline, timelineItems.length, scrollToBottom]);
 
   // ===== VER QUANDO MOSTRAR O BOTÃO "IR PRO FIM" =====
   const handleScrollCheck = useCallback(() => {
@@ -208,16 +249,16 @@ export const Chat: React.FC = () => {
     );
   }, []);
 
-  // Recalcula quando chegam novas mensagens
+  // Recalcula quando chegam novas entradas na timeline
   useEffect(() => {
     handleScrollCheck();
-  }, [messages.length, handleScrollCheck]);
+  }, [timelineItems.length, handleScrollCheck]);
 
   // Sempre joga o usuario para a ultima mensagem quando chegar/enviar nova
   useEffect(() => {
-    if (loadingMessages || messages.length === 0) return;
+    if (loadingTimeline || timelineItems.length === 0) return;
     scrollToBottom("auto");
-  }, [loadingMessages, messages.length, scrollToBottom]);
+  }, [loadingTimeline, timelineItems.length, scrollToBottom]);
 
   // Também atualiza estado ao rolar a página inteira
   useEffect(() => {
@@ -304,14 +345,6 @@ export const Chat: React.FC = () => {
         ? rawContacts[0]
         : rawContacts;
 
-      const rawTags: any = data.conversation_tags?.[0]?.tags;
-      let tagName: string | undefined;
-      if (Array.isArray(rawTags)) {
-        tagName = rawTags[0]?.name;
-      } else {
-        tagName = rawTags?.name;
-      }
-
       const ct = (data.conversation_tags as any[]) ?? [];
       const tagsFromConv: UiTag[] = ct
         .map((row) => row?.tags)
@@ -380,7 +413,6 @@ export const Chat: React.FC = () => {
   useEffect(() => {
     if (!conversation?.id) return;
 
-    // carrega 1x
     reloadConversationTags(conversation.id);
 
     const channel = supabase
@@ -393,10 +425,7 @@ export const Chat: React.FC = () => {
           table: "conversation_tags",
           filter: `conversation_id=eq.${conversation.id}`,
         },
-        () => {
-          // sempre que inserir/remover, recarrega do banco (porque o payload não traz tags)
-          reloadConversationTags(conversation.id);
-        },
+        () => reloadConversationTags(conversation.id),
       )
       .subscribe();
 
@@ -430,8 +459,26 @@ export const Chat: React.FC = () => {
           }
         : prev,
     );
+    const actorName =
+      profile?.name ?? authUser.user_metadata?.name ?? authUser.email ?? "Atendente";
+
+    const { error: logError } = await supabase
+      .from("conversation_events")
+      .insert({
+        conversation_id: id,
+        event_type: "conversation_accepted",
+        performed_by: authUser.id,
+        metadata: {
+          performed_by_name: actorName,
+        },
+      });
+
+    if (logError) {
+      console.warn("Erro ao registrar evento da conversa:", logError);
+    }
+
     setAcceptingConversation(false);
-  }, [authUser, id]);
+  }, [authUser, id, profile]);
 
   const addTagToConversation = async (
     conversationId: string,
@@ -472,7 +519,6 @@ export const Chat: React.FC = () => {
         setSelectedTags((prev) => [tag, ...prev]);
       }
 
-      // opcional: manter conversation.tag sincronizada com a primeira
       const nextFirst = !isSelected
         ? tag.name
         : selectedTags.filter((t) => t.id !== tag.id)[0]?.name;
@@ -484,7 +530,6 @@ export const Chat: React.FC = () => {
     }
   };
 
-  // Marca conversa como lida sempre que houver mensagens (incluindo novas em tempo real)
   useEffect(() => {
     if (!id || loadingMessages || messages.length === 0) return;
 
@@ -496,8 +541,6 @@ export const Chat: React.FC = () => {
     persistConversationOpenedAt(id, ts || Date.now());
   }, [id, messages, loadingMessages]);
 
-  // ===== Enviar mensagem (texto / imagem / áudio) =====
-  // Enviar mensagem (texto / imagem / áudio)
   const handleSendMessage = async (input: SendableInput) => {
     if (!id) return;
 
@@ -530,13 +573,7 @@ export const Chat: React.FC = () => {
       author: "atendente",
       text:
         bodyText ||
-        (outboundType === "image"
-          ? "🖼️ Imagem"
-          : outboundType === "audio"
-            ? "🎧 Áudio"
-            : outboundType === "document"
-              ? "📄 Documento"
-              : ""),
+        getMediaPreviewText(outboundType, filename),
       createdAt: new Date().toISOString(),
       type: outboundType,
       mediaUrl,
@@ -546,8 +583,6 @@ export const Chat: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, optimistic]);
-
-    // já rola pro fim ao enviar
     scrollToBottom("smooth");
 
     const { data, error } = await supabase.functions.invoke(
@@ -560,6 +595,7 @@ export const Chat: React.FC = () => {
           mediaUrl,
           mediaMimeType,
           filename,
+          fileSize,
         },
       },
     );
@@ -578,12 +614,7 @@ export const Chat: React.FC = () => {
           .update({ filename })
           .eq("id", inserted.id);
 
-        if (filenameError) {
-          console.warn(
-            "Não foi possível persistir o nome do documento:",
-            filenameError,
-          );
-        }
+        if (filenameError) console.warn("Persist filename failed:", filenameError);
       }
 
       const persisted: Message = mapDbMessage(inserted);
@@ -593,12 +624,19 @@ export const Chat: React.FC = () => {
         fileSize: persisted.fileSize ?? optimistic.fileSize,
         mediaUrl: persisted.mediaUrl ?? optimistic.mediaUrl,
         mediaMimeType: persisted.mediaMimeType ?? optimistic.mediaMimeType,
+        text:
+          persisted.text ||
+          getMediaPreviewText(outboundType, optimistic.filename),
       };
 
       setMessages((prev) => {
         const withoutTemp = prev.filter((m) => m.id !== tempId);
-        const alreadyExists = withoutTemp.some((m) => m.id === merged.id);
-        if (alreadyExists) return withoutTemp;
+        const idx = withoutTemp.findIndex((m) => m.id === merged.id);
+        if (idx >= 0) {
+          const next = [...withoutTemp];
+          next[idx] = { ...next[idx], ...merged };
+          return next;
+        }
         return [...withoutTemp, merged];
       });
 
@@ -649,23 +687,35 @@ export const Chat: React.FC = () => {
         onScroll={handleScrollCheck}
         className="h-full max-h-[70vh] overflow-y-auto p-4 space-y-4"
       >
-        {loadingMessages ? (
+        {eventsError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            Não foi possível carregar os logs do sistema.
+          </div>
+        )}
+        {loadingTimeline ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">Carregando mensagens...</p>
           </div>
-        ) : messages.length === 0 ? (
+        ) : timelineItems.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-gray-500">Nenhuma mensagem ainda</p>
           </div>
         ) : (
           <>
-            {messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                contactName={conversation.contactName}
-              />
-            ))}
+            {timelineItems.map((item) =>
+              item.kind === "message" ? (
+                <MessageBubble
+                  key={`message-${item.message.id}`}
+                  message={item.message}
+                  contactName={conversation.contactName}
+                />
+              ) : (
+                <SystemEventBubble
+                  key={`event-${item.event.id}`}
+                  event={item.event}
+                />
+              ),
+            )}
           </>
         )}
       </div>
