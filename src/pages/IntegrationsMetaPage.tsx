@@ -62,8 +62,8 @@ export const MetaIntegrationsPage: React.FC = () => {
       return;
     }
 
-    const state = encodeURIComponent(clinicId);
-    const redirectUri = encodeURIComponent(META_REDIRECT_URI);
+    const state = `${clinicId}|fb`;
+    const redirectUri = META_REDIRECT_URI;
 
     const scopes = [
       "public_profile",
