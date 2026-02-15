@@ -1,72 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 
-const META_APP_ID = import.meta.env.VITE_META_APP_ID as string | undefined;
-const META_REDIRECT_URI = import.meta.env.VITE_META_REDIRECT_URI as
-  | string
-  | undefined;
-
 type PageItem = { id: string; name: string; access_token?: string };
-
-type StateParsed =
-  | { phase: "fb"; clinicId: string }
-  | { phase: "ig"; clinicId: string; pageId: string }
-  | { phase: "unknown"; raw: string };
-
-function parseState(stateRaw: string): StateParsed {
-  const raw = String(stateRaw ?? "").trim();
-  if (!raw) return { phase: "unknown", raw };
-
-  const parts = raw
-    .split("|")
-    .map((p) => p.trim())
-    .filter(Boolean);
-
-  if (parts.length >= 2 && parts[1] === "fb") {
-    return { phase: "fb", clinicId: parts[0] };
-  }
-
-  if (parts.length >= 3 && parts[1] === "ig") {
-    return { phase: "ig", clinicId: parts[0], pageId: parts[2] };
-  }
-
-  if (parts.length === 1) {
-    return { phase: "fb", clinicId: parts[0] };
-  }
-
-  return { phase: "unknown", raw };
-}
-
-function buildInstagramBusinessLoginUrl(opts: {
-  appId: string;
-  redirectUri: string;
-  clinicId: string;
-  pageId: string;
-}) {
-  const state = `${opts.clinicId}|ig|${opts.pageId}`;
-
-  const scopes = [
-    "instagram_business_basic",
-    "instagram_business_manage_messages",
-    "instagram_business_manage_comments",
-    "instagram_business_content_publish",
-    "instagram_business_manage_insights",
-  ].join(",");
-
-  return (
-    `https://www.instagram.com/oauth/authorize` +
-    `?force_reauth=true` +
-    `&client_id=${encodeURIComponent(opts.appId)}` +
-    `&redirect_uri=${encodeURIComponent(opts.redirectUri)}` +
-    `&response_type=code` +
-    `&state=${encodeURIComponent(state)}` +
-    `&scope=${encodeURIComponent(scopes)}`
-  );
-}
 
 export function MetaCallbackPage() {
   const { profile } = useAuth();
@@ -86,38 +25,10 @@ export function MetaCallbackPage() {
   );
 
   const code = params.get("code") ?? "";
-  const stateRaw = params.get("state") ?? "";
-  const parsedState = useMemo(() => parseState(stateRaw), [stateRaw]);
-
-  const clinicId =
-    profile?.clinic_id ??
-    (parsedState.phase === "fb"
-      ? parsedState.clinicId
-      : parsedState.phase === "ig"
-        ? parsedState.clinicId
-        : "") ??
-    "";
+  const stateClinicId = params.get("state") ?? "";
+  const clinicId = profile?.clinic_id ?? stateClinicId;
 
   const goBack = () => navigate("/inbox/settings/integrations/meta");
-
-  const redirectToInstagram = useCallback(
-    (pageId: string) => {
-      if (!META_APP_ID || !META_REDIRECT_URI) {
-        navigate("/inbox/settings/integrations/meta");
-        return;
-      }
-
-      const url = buildInstagramBusinessLoginUrl({
-        appId: META_APP_ID,
-        redirectUri: META_REDIRECT_URI,
-        clinicId,
-        pageId,
-      });
-
-      window.location.href = url;
-    },
-    [clinicId, navigate],
-  );
 
   useEffect(() => {
     const run = async () => {
@@ -133,32 +44,6 @@ export function MetaCallbackPage() {
       if (!code) {
         setError("code ausente no callback.");
         setLoading(false);
-        return;
-      }
-
-      if (parsedState.phase === "ig") {
-        const pageId = String(parsedState.pageId ?? "").trim();
-
-        if (!pageId) {
-          setError("pageId ausente no state do Instagram.");
-          setLoading(false);
-          return;
-        }
-
-        const { error: fnErr } = await supabase.functions.invoke(
-          "meta-connect",
-          {
-            body: { action: "exchange_ig_code", clinicId, pageId, code },
-          },
-        );
-
-        if (fnErr) {
-          setError("Erro ao finalizar conexão do Instagram.");
-          setLoading(false);
-          return;
-        }
-
-        navigate("/inbox/settings/integrations/meta");
         return;
       }
 
@@ -202,7 +87,7 @@ export function MetaCallbackPage() {
             return;
           }
 
-          redirectToInstagram(suggestedPageId);
+          navigate("/inbox/settings/integrations/meta");
           return;
         }
 
@@ -215,7 +100,7 @@ export function MetaCallbackPage() {
     };
 
     run();
-  }, [clinicId, code, navigate, parsedState, redirectToInstagram]);
+  }, [clinicId, code, navigate]);
 
   const connectSelected = async () => {
     setLoading(true);
@@ -254,7 +139,7 @@ export function MetaCallbackPage() {
       return;
     }
 
-    redirectToInstagram(selectedPageId);
+    navigate("/inbox/settings/integrations/meta");
   };
 
   return (

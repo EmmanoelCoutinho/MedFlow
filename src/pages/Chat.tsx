@@ -100,13 +100,11 @@ export const Chat: React.FC = () => {
 
   const loadingTimeline = loadingMessages || loadingEvents;
 
-  // Quando trocar de conversa, resetar estado de scroll
   useEffect(() => {
     setShowScrollToBottom(false);
     justOpenedRef.current = true;
   }, [id]);
 
-  // ===== FUNÇÕES AUXILIARES DE MÉTRICA =====
   const getContainerMetrics = () => {
     const container = messagesContainerRef.current;
     if (!container) return null;
@@ -142,7 +140,6 @@ export const Chat: React.FC = () => {
     };
   };
 
-  // ===== SCROLL PRO FINAL (CONTAINER OU WINDOW) =====
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const containerMetrics = getContainerMetrics();
     const windowMetrics = getWindowMetrics();
@@ -174,32 +171,24 @@ export const Chat: React.FC = () => {
     setShowScrollToBottom(false);
   }, []);
 
-  // ===== SEMPRE ABRIR A CONVERSA NO FINAL =====
   useLayoutEffect(() => {
     if (loadingTimeline) return;
     if (!timelineItems.length) return;
-
-    // só auto-scroll na abertura da conversa
     if (!justOpenedRef.current) return;
 
-    // marca que já tratamos essa abertura
     justOpenedRef.current = false;
 
-    // 1ª tentativa logo após o layout
     scrollToBottom("auto");
 
-    // 2ª tentativa na próxima tick (caso a página ainda cresça)
     setTimeout(() => {
       scrollToBottom("auto");
     }, 0);
 
-    // 3ª tentativa com um pequeno delay (ex: quando o realtime entra logo depois)
     setTimeout(() => {
       scrollToBottom("auto");
     }, 100);
   }, [loadingTimeline, timelineItems.length, scrollToBottom]);
 
-  // ===== VER QUANDO MOSTRAR O BOTÃO "IR PRO FIM" =====
   const handleScrollCheck = useCallback(() => {
     const containerMetrics = getContainerMetrics();
     const windowMetrics = getWindowMetrics();
@@ -232,7 +221,7 @@ export const Chat: React.FC = () => {
     if (error) return;
 
     const mapped: UiTag[] = ((data as any[]) ?? [])
-      .map((r) => r.tags)
+      .map((r) => (r as any).tags)
       .flat()
       .filter(Boolean)
       .map((t: any) => ({
@@ -243,31 +232,26 @@ export const Chat: React.FC = () => {
 
     setSelectedTags(mapped);
 
-    // mantém o "conversation.tag" (singular) sincronizado pra não quebrar filtros antigos
     setConversation((prev) =>
       prev ? ({ ...prev, tag: mapped[0]?.name as any } as any) : prev,
     );
   }, []);
 
-  // Recalcula quando chegam novas entradas na timeline
   useEffect(() => {
     handleScrollCheck();
   }, [timelineItems.length, handleScrollCheck]);
 
-  // Sempre joga o usuario para a ultima mensagem quando chegar/enviar nova
   useEffect(() => {
     if (loadingTimeline || timelineItems.length === 0) return;
     scrollToBottom("auto");
   }, [loadingTimeline, timelineItems.length, scrollToBottom]);
 
-  // Também atualiza estado ao rolar a página inteira
   useEffect(() => {
     const onWindowScroll = () => handleScrollCheck();
     window.addEventListener("scroll", onWindowScroll, { passive: true });
     return () => window.removeEventListener("scroll", onWindowScroll);
   }, [handleScrollCheck]);
 
-  // Buscar conversa + contato + tag
   useEffect(() => {
     if (!id) return;
     if (!clinicId || !departmentId) {
@@ -340,12 +324,12 @@ export const Chat: React.FC = () => {
 
       const last = messagesRows[messagesRows.length - 1];
 
-      const rawContacts: any = data.contacts;
+      const rawContacts: any = (data as any).contacts;
       const contactRow = Array.isArray(rawContacts)
         ? rawContacts[0]
         : rawContacts;
 
-      const ct = (data.conversation_tags as any[]) ?? [];
+      const ct = ((data as any).conversation_tags as any[]) ?? [];
       const tagsFromConv: UiTag[] = ct
         .map((row) => row?.tags)
         .flat()
@@ -357,24 +341,25 @@ export const Chat: React.FC = () => {
         }));
 
       const mappedConversation: Conversation = {
-        id: data.id,
+        id: (data as any).id,
         clinicId: (data as any).clinic_id ?? undefined,
-        channel: data.channel as Channel,
-        status: (data.status as Conversation["status"]) ?? "pending",
+        channel: (data as any).channel as Channel,
+        status: ((data as any).status as Conversation["status"]) ?? "pending",
         contactName:
           contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
         contactNumber: contactRow?.phone ?? "",
         lastMessage: last?.text ?? "",
         lastMessageType: (last as any)?.type ?? "text",
         lastTimestamp:
-          last?.sent_at ?? data.last_message_at ?? new Date().toISOString(),
+          last?.sent_at ??
+          (data as any).last_message_at ??
+          new Date().toISOString(),
         unreadCount: 0,
         tags: tagsFromConv,
-        assignedTo: data.assigned_user_id ?? undefined,
+        assignedTo: (data as any).assigned_user_id ?? undefined,
       };
 
       setSelectedTags(tagsFromConv);
-
       setConversation(mappedConversation);
       setLoadingConversation(false);
     };
@@ -383,8 +368,8 @@ export const Chat: React.FC = () => {
   }, [id, clinicId, departmentId]);
 
   useEffect(() => {
-    const clinicId = (conversation as any)?.clinicId as string | undefined;
-    if (!clinicId) return;
+    const cid = (conversation as any)?.clinicId as string | undefined;
+    if (!cid) return;
 
     const fetchClinicTags = async () => {
       setTagsLoading(true);
@@ -392,7 +377,7 @@ export const Chat: React.FC = () => {
       const { data, error } = await supabase
         .from("tags")
         .select("id,name,color,clinic_id")
-        .eq("clinic_id", clinicId)
+        .eq("clinic_id", cid)
         .order("created_at", { ascending: false });
 
       if (!error) {
@@ -459,8 +444,12 @@ export const Chat: React.FC = () => {
           }
         : prev,
     );
+
     const actorName =
-      profile?.name ?? authUser.user_metadata?.name ?? authUser.email ?? "Atendente";
+      profile?.name ??
+      (authUser as any).user_metadata?.name ??
+      (authUser as any).email ??
+      "Atendente";
 
     const { error: logError } = await supabase
       .from("conversation_events")
@@ -541,8 +530,45 @@ export const Chat: React.FC = () => {
     persistConversationOpenedAt(id, ts || Date.now());
   }, [id, messages, loadingMessages]);
 
+  const canReply = useMemo(() => {
+    if (!authUser || !conversation) return false;
+
+    if (conversation.assignedTo) {
+      return conversation.assignedTo === authUser.id;
+    }
+
+    return !!departmentId;
+  }, [authUser, conversation, departmentId]);
+
+  // ✅ NOVO: cria o nonce obrigatório antes de enviar
+  const createSendNonce = useCallback(async (conversationId: string) => {
+    const { data, error } = await supabase.functions.invoke(
+      "create-send-nonce",
+      {
+        body: { conversationId },
+      },
+    );
+
+    if (error) {
+      console.error("create-send-nonce error:", error);
+      throw error;
+    }
+
+    const nonce = (data as any)?.nonce ?? null;
+    if (!nonce) {
+      throw new Error("create-send-nonce não retornou nonce");
+    }
+
+    return nonce as string;
+  }, []);
+
   const handleSendMessage = async (input: SendableInput) => {
     if (!id) return;
+    if (!conversation?.channel) return;
+
+    if (!canReply) {
+      return;
+    }
 
     let bodyText = "";
     let outboundType: "text" | "image" | "audio" | "document" = "text";
@@ -571,9 +597,7 @@ export const Chat: React.FC = () => {
       id: tempId,
       conversationId: id,
       author: "atendente",
-      text:
-        bodyText ||
-        getMediaPreviewText(outboundType, filename),
+      text: bodyText || getMediaPreviewText(outboundType, filename),
       createdAt: new Date().toISOString(),
       type: outboundType,
       mediaUrl,
@@ -585,23 +609,45 @@ export const Chat: React.FC = () => {
     setMessages((prev) => [...prev, optimistic]);
     scrollToBottom("smooth");
 
-    const { data, error } = await supabase.functions.invoke(
-      "send-whatsapp-message",
-      {
-        body: {
-          conversationId: id,
-          text: bodyText,
-          type: outboundType,
-          mediaUrl,
-          mediaMimeType,
-          filename,
-          fileSize,
-        },
+    const channel = conversation.channel;
+
+    const functionName =
+      channel === "whatsapp"
+        ? "send-whatsapp-message"
+        : channel === "messenger" || channel === "instagram"
+          ? "send-meta-message"
+          : null;
+
+    if (!functionName) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      return;
+    }
+
+    // ✅ AQUI: gerar nonce e mandar junto
+    let nonce: string;
+    try {
+      nonce = await createSendNonce(id);
+    } catch (e) {
+      console.error("Falha ao gerar nonce:", e);
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      return;
+    }
+
+    const { data, error } = await supabase.functions.invoke(functionName, {
+      body: {
+        nonce, // ✅ obrigatório agora
+        conversationId: id,
+        text: bodyText,
+        type: outboundType,
+        mediaUrl,
+        mediaMimeType,
+        filename,
+        fileSize,
       },
-    );
+    });
 
     if (error) {
-      console.error("Erro ao enviar mensagem para WhatsApp:", error);
+      console.error(`Erro ao enviar mensagem (${functionName}):`, error);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       return;
     }
@@ -614,7 +660,9 @@ export const Chat: React.FC = () => {
           .update({ filename })
           .eq("id", inserted.id);
 
-        if (filenameError) console.warn("Persist filename failed:", filenameError);
+        if (filenameError) {
+          console.warn("Persist filename failed:", filenameError);
+        }
       }
 
       const persisted: Message = mapDbMessage(inserted);
@@ -681,7 +729,6 @@ export const Chat: React.FC = () => {
         }
       />
 
-      {/* Área de Mensagens */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScrollCheck}
@@ -720,7 +767,6 @@ export const Chat: React.FC = () => {
         )}
       </div>
 
-      {/* Botão flutuante pra ir pro fim */}
       {showScrollToBottom && (
         <button
           type="button"
@@ -768,8 +814,6 @@ export const Chat: React.FC = () => {
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {availableTags.map((t) => {
-                    console.log(t);
-
                     const active = selectedTags.some((s) => s.id === t.id);
                     const loading = tagsSavingId === t.id;
 
@@ -809,8 +853,7 @@ export const Chat: React.FC = () => {
         </div>
       )}
 
-      {/* IMPORTANTE: o MessageInput agora pode enviar string OU objeto */}
-      <MessageInput onSend={handleSendMessage} />
+      <MessageInput onSend={handleSendMessage} disabled={!canReply} />
     </div>
   );
 };
