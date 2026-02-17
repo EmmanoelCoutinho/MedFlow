@@ -10,7 +10,7 @@ import { Inbox } from "./pages/Inbox";
 import { Chat } from "./pages/Chat";
 import { Header } from "./components/layout/Header";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { InboxEmpty } from "./pages/InboxEmpty";
+import { InboxAnalyticsDashboard } from "./pages/InboxAnalyticsDashboard";
 import { Tags } from "./pages/Tags";
 import { ReactNode } from "react";
 import { ClinicProvider } from "./contexts/ClinicContext";
@@ -81,7 +81,7 @@ function RoutedApp() {
               </RequireAuth>
             }
           >
-            <Route index element={<InboxEmpty />} />
+            <Route index element={<InboxAnalyticsDashboard />} />
             <Route path="chat/:id" element={<Chat />} />
             <Route path="tags" element={<Tags />} />
             <Route path="departments" element={<DepartmentsPage />} />
