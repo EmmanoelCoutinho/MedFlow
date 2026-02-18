@@ -41,12 +41,54 @@ const defaultDateRange = () => {
 const formatSeconds = (seconds: number | null) => {
   if (seconds === null || Number.isNaN(seconds)) return "-";
   if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600)
+    return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 
-  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
 };
 
 const KpiSkeleton = () => (
   <div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+);
+
+const Pill = ({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`rounded-full px-2 py-1 text-xs ${
+      active ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+    }`}
+  >
+    {label}
+  </button>
+);
+
+const SectionHeader = ({
+  title,
+  subtitle,
+  right,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+}) => (
+  <div className="mb-3 flex items-start justify-between gap-3">
+    <div>
+      <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+      {subtitle ? <p className="text-xs text-slate-500">{subtitle}</p> : null}
+    </div>
+    {right}
+  </div>
 );
 
 const HorizontalBars = ({
@@ -95,7 +137,18 @@ const HorizontalBars = ({
   );
 };
 
-const DailyLeadsChart = ({ rows }: { rows: Array<{ day: string; leads: number }> }) => {
+const formatDayBR = (yyyyMmDd: string) => {
+  if (!yyyyMmDd || yyyyMmDd.length < 10) return "-";
+  const [y, m, d] = yyyyMmDd.slice(0, 10).split("-");
+  if (!y || !m || !d) return yyyyMmDd;
+  return `${d}/${m}/${y}`;
+};
+
+const DailyLeadsChart = ({
+  rows,
+}: {
+  rows: Array<{ day: string; leads: number }>;
+}) => {
   const max = Math.max(1, ...rows.map((row) => row.leads));
 
   if (rows.length === 0) {
@@ -106,7 +159,9 @@ const DailyLeadsChart = ({ rows }: { rows: Array<{ day: string; leads: number }>
     <div className="space-y-2">
       {rows.map((row) => (
         <div key={row.day} className="flex items-center gap-3">
-          <span className="w-24 shrink-0 text-xs text-slate-600">{row.day}</span>
+          <span className="w-24 shrink-0 text-xs text-slate-600">
+            {formatDayBR(row.day)}
+          </span>
           <div className="h-2 flex-1 rounded-full bg-slate-100">
             <div
               className="h-2 rounded-full bg-cyan-500"
@@ -122,6 +177,24 @@ const DailyLeadsChart = ({ rows }: { rows: Array<{ day: string; leads: number }>
   );
 };
 
+const KpiCard = ({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: React.ReactNode;
+  hint?: string;
+}) => (
+  <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex items-start justify-between gap-2">
+      <p className="text-sm text-slate-500">{label}</p>
+      {hint ? <span className="text-xs text-slate-400">{hint}</span> : null}
+    </div>
+    <p className="mt-3 text-2xl font-semibold text-slate-900">{value}</p>
+  </article>
+);
+
 export const InboxAnalyticsDashboard: React.FC = () => {
   const { clinicId } = useClinic();
   const navigate = useNavigate();
@@ -132,7 +205,9 @@ export const InboxAnalyticsDashboard: React.FC = () => {
   const [draftStart, setDraftStart] = useState(
     searchParams.get("start") ?? defaults.start,
   );
-  const [draftEnd, setDraftEnd] = useState(searchParams.get("end") ?? defaults.end);
+  const [draftEnd, setDraftEnd] = useState(
+    searchParams.get("end") ?? defaults.end,
+  );
   const [draftChannels, setDraftChannels] = useState<string[]>(
     searchParams.getAll("channel"),
   );
@@ -146,10 +221,12 @@ export const InboxAnalyticsDashboard: React.FC = () => {
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [backlog, setBacklog] = useState<BacklogItem[]>([]);
 
-  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>(
+  const [departments, setDepartments] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [users, setUsers] = useState<Array<{ user_id: string; name: string }>>(
     [],
   );
-  const [users, setUsers] = useState<Array<{ user_id: string; name: string }>>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -161,13 +238,17 @@ export const InboxAnalyticsDashboard: React.FC = () => {
     const urlStart = searchParams.get("start") ?? defaults.start;
     const urlEnd = searchParams.get("end") ?? defaults.end;
 
+    // importante: se vier "", não aplicar
+    const departmentId = searchParams.get("department_id") || undefined;
+    const assignedUserId = searchParams.get("assigned_user_id") || undefined;
+
     return {
       clinicId,
       start: new Date(`${urlStart}T00:00:00`).toISOString(),
       end: new Date(`${urlEnd}T23:59:59`).toISOString(),
       channels: searchParams.getAll("channel"),
-      departmentId: searchParams.get("department_id") ?? undefined,
-      assignedUserId: searchParams.get("assigned_user_id") ?? undefined,
+      departmentId,
+      assignedUserId,
     };
   }, [clinicId, searchParams, defaults.end, defaults.start]);
 
@@ -197,12 +278,8 @@ export const InboxAnalyticsDashboard: React.FC = () => {
         .eq("clinic_id", clinicId)
         .order("name"),
     ]).then(([depRes, usersRes]) => {
-      if (!depRes.error) {
-        setDepartments(depRes.data ?? []);
-      }
-      if (!usersRes.error) {
-        setUsers(usersRes.data ?? []);
-      }
+      if (!depRes.error) setDepartments(depRes.data ?? []);
+      if (!usersRes.error) setUsers(usersRes.data ?? []);
     });
   }, [clinicId]);
 
@@ -222,11 +299,11 @@ export const InboxAnalyticsDashboard: React.FC = () => {
         setAnalytics(analyticsResult);
         setBacklog(backlogResult);
       } catch (fetchError: unknown) {
+        // postgrest errors nem sempre são instance of Error
         const message =
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Erro ao carregar analytics.";
-
+          (fetchError as any)?.message ||
+          (fetchError as any)?.error_description ||
+          "Erro ao carregar analytics.";
         setError(message);
       } finally {
         setLoading(false);
@@ -242,19 +319,15 @@ export const InboxAnalyticsDashboard: React.FC = () => {
     params.set("end", draftEnd);
     draftChannels.forEach((channel) => params.append("channel", channel));
 
-    if (draftDepartmentId) {
-      params.set("department_id", draftDepartmentId);
-    }
-    if (draftAssignedUserId) {
+    if (draftDepartmentId) params.set("department_id", draftDepartmentId);
+    if (draftAssignedUserId)
       params.set("assigned_user_id", draftAssignedUserId);
-    }
 
     setSearchParams(params);
   };
 
   const clearFilters = () => {
     const range = defaultDateRange();
-
     setSearchParams(
       new URLSearchParams({
         start: range.start,
@@ -273,7 +346,6 @@ export const InboxAnalyticsDashboard: React.FC = () => {
 
   const backlogPage = useMemo(() => {
     const startIndex = (page - 1) * 20;
-
     return backlog.slice(startIndex, startIndex + 20);
   }, [backlog, page]);
 
@@ -284,15 +356,22 @@ export const InboxAnalyticsDashboard: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(backlog.length / 20));
   const hasData = !!analytics && analytics.kpis.leads > 0;
 
+  // novos KPIs “amigáveis”
+  const backlogTotal = backlog.length;
+
   return (
     <div className="h-full overflow-y-auto bg-slate-50 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
+        {/* FILTROS */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-semibold text-slate-900">Analytics</h1>
+              <h1 className="text-2xl font-semibold text-slate-900">
+                Análise & Atendimento
+              </h1>
               <p className="text-sm text-slate-500">
-                Métricas de aquisição, operação e SLA
+                Visão executiva, decisão por canal/departamento e ação imediata
+                no backlog
               </p>
             </div>
             <div className="flex gap-2">
@@ -331,18 +410,12 @@ export const InboxAnalyticsDashboard: React.FC = () => {
               <p className="mb-2 text-xs text-slate-500">Canal</p>
               <div className="flex flex-wrap gap-2">
                 {CHANNEL_OPTIONS.map((channel) => (
-                  <button
+                  <Pill
                     key={channel}
-                    type="button"
+                    active={draftChannels.includes(channel)}
+                    label={CHANNEL_LABEL[channel]}
                     onClick={() => toggleChannel(channel)}
-                    className={`rounded-full px-2 py-1 text-xs ${
-                      draftChannels.includes(channel)
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {CHANNEL_LABEL[channel]}
-                  </button>
+                  />
                 ))}
               </div>
             </div>
@@ -375,9 +448,10 @@ export const InboxAnalyticsDashboard: React.FC = () => {
           </div>
         </section>
 
+        {/* ERRO */}
         {error ? (
           <section className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-            <p className="font-medium">Erro ao carregar analytics</p>
+            <p className="font-medium">Erro ao carregar dados</p>
             <p className="text-sm">{error}</p>
             <button
               type="button"
@@ -389,233 +463,306 @@ export const InboxAnalyticsDashboard: React.FC = () => {
           </section>
         ) : null}
 
-        <section className="grid gap-4 md:grid-cols-4">
-          {loading || !analytics
-            ? Array.from({ length: 4 }).map((_, index) => <KpiSkeleton key={index} />)
-            : [
-                { label: "Leads (chats criados)", value: analytics.kpis.leads },
-                {
-                  label: "Conversas Ativas",
-                  value: analytics.kpis.activeConversations,
-                },
-                {
-                  label: "Mensagens Recebidas",
-                  value: analytics.kpis.inboundMessages,
-                },
-                {
-                  label: "Mensagens Enviadas",
-                  value: analytics.kpis.outboundMessages,
-                },
-              ].map((item) => (
-                <article
-                  key={item.label}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                >
-                  <p className="text-sm text-slate-500">{item.label}</p>
-                  <p className="mt-3 text-2xl font-semibold text-slate-900">
-                    {item.value}
-                  </p>
-                </article>
-              ))}
-        </section>
+        {/* CAMADA 1: RESUMO EXECUTIVO */}
+        <section className="space-y-3">
+          <SectionHeader
+            title="Resumo executivo"
+            subtitle="Principais indicadores do período para acompanhar volume, atendimento e backlog."
+          />
+          <section className="grid gap-4 md:grid-cols-4">
+            {loading || !analytics ? (
+              Array.from({ length: 4 }).map((_, index) => (
+                <KpiSkeleton key={index} />
+              ))
+            ) : (
+              <>
+                <KpiCard label="Novos leads" value={analytics.kpis.leads} />
+                <KpiCard
+                  label="Backlog sem resposta"
+                  value={backlogTotal}
+                  hint="No momento"
+                />
+                <KpiCard
+                  label="Mensagens recebidas"
+                  value={analytics.kpis.inboundMessages}
+                  hint="Período"
+                />
+                <KpiCard
+                  label="Mensagens enviadas"
+                  value={analytics.kpis.outboundMessages}
+                  hint="Período"
+                />
+              </>
+            )}
+          </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          {loading || !analytics
-            ? Array.from({ length: 3 }).map((_, index) => <KpiSkeleton key={index} />)
-            : [
-                {
-                  label: "p50 1ª resposta",
-                  value: formatSeconds(analytics.kpis.p50FirstResponseSec),
-                },
-                {
-                  label: "p90 1ª resposta",
-                  value: formatSeconds(analytics.kpis.p90FirstResponseSec),
-                },
-                {
-                  label: "% dentro do SLA (<= 2 min)",
-                  value:
+          <section className="grid gap-4 md:grid-cols-4">
+            {loading || !analytics ? (
+              Array.from({ length: 4 }).map((_, index) => (
+                <KpiSkeleton key={index} />
+              ))
+            ) : (
+              <>
+                <KpiCard
+                  label="Conversas ativas"
+                  value={analytics.kpis.activeConversations}
+                  hint=""
+                />
+                <KpiCard
+                  label="Tempo típico de 1ª resposta"
+                  value={formatSeconds(analytics.kpis.p50FirstResponseSec)}
+                />
+                <KpiCard
+                  label="90% respondem em até"
+                  value={formatSeconds(analytics.kpis.p90FirstResponseSec)}
+                  hint="Tempo alto"
+                />
+                <KpiCard
+                  label="Dentro do SLA (até 2 min)"
+                  value={
                     analytics.kpis.withinSlaPct !== null
                       ? `${analytics.kpis.withinSlaPct}%`
-                      : "-",
-                },
-              ].map((item) => (
-                <article
-                  key={item.label}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                >
-                  <p className="text-sm text-slate-500">{item.label}</p>
-                  <p className="mt-3 text-2xl font-semibold text-slate-900">
-                    {item.value}
-                  </p>
-                </article>
-              ))}
+                      : "-"
+                  }
+                  hint="SLA"
+                />
+              </>
+            )}
+          </section>
         </section>
 
         {!loading && !error && !hasData ? (
           <section className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600">
-            <p className="font-medium">Nenhum dado para o período selecionado.</p>
+            <p className="font-medium">
+              Nenhum dado para o período selecionado.
+            </p>
             <p className="text-sm">Tente ampliar o período.</p>
           </section>
         ) : null}
 
+        {/* CAMADA 2: DECISÃO */}
         {analytics ? (
-          <section className="grid gap-4 lg:grid-cols-2">
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="mb-4 text-sm font-semibold text-slate-700">
-                Leads por Canal
-              </h2>
-              <div className="space-y-3">
-                {analytics.leadsByChannel.length === 0 ? (
-                  <p className="text-sm text-slate-500">Sem dados no período.</p>
-                ) : (
-                  analytics.leadsByChannel.map((item) => (
-                    <div key={item.channel} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs text-slate-600">
-                        <span>{CHANNEL_LABEL[item.channel] ?? item.channel}</span>
-                        <span>{item.leads}</span>
+          <section className="space-y-3">
+            <SectionHeader
+              title="Decisão"
+              subtitle="Entenda volume e distribuição por canal/departamento e a tendência do período."
+            />
+            <section className="grid gap-4 lg:grid-cols-2">
+              <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <SectionHeader title="Leads por canal" />
+                <div className="space-y-3">
+                  {analytics.leadsByChannel.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      Sem dados no período.
+                    </p>
+                  ) : (
+                    analytics.leadsByChannel.map((item) => (
+                      <div key={item.channel} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs text-slate-600">
+                          <span>
+                            {CHANNEL_LABEL[item.channel] ?? item.channel}
+                          </span>
+                          <span>{item.leads}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100">
+                          <div
+                            className="h-2 rounded-full"
+                            style={{
+                              width: `${Math.max(
+                                6,
+                                (item.leads /
+                                  Math.max(1, analytics.kpis.leads)) *
+                                  100,
+                              )}%`,
+                              backgroundColor:
+                                CHANNEL_COLORS[item.channel] ??
+                                CHANNEL_COLORS.unknown,
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div className="h-2 rounded-full bg-slate-100">
-                        <div
-                          className="h-2 rounded-full"
-                          style={{
-                            width: `${Math.max(
-                              6,
-                              (item.leads / Math.max(1, analytics.kpis.leads)) * 100,
-                            )}%`,
-                            backgroundColor:
-                              CHANNEL_COLORS[item.channel] ?? CHANNEL_COLORS.unknown,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </article>
+                    ))
+                  )}
+                </div>
+              </article>
 
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="mb-4 text-sm font-semibold text-slate-700">
-                Leads por Departamento
-              </h2>
-              <HorizontalBars
-                rows={analytics.leadsByDepartment}
-                labelKey="department"
-                valueKey="leads"
-              />
-            </article>
+              <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <SectionHeader title="Leads por departamento" />
+                <HorizontalBars
+                  rows={analytics.leadsByDepartment}
+                  labelKey="department"
+                  valueKey="leads"
+                />
+              </article>
 
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="mb-4 text-sm font-semibold text-slate-700">
-                Evolução diária de Leads
-              </h2>
-              <DailyLeadsChart rows={analytics.dailyLeads} />
-            </article>
+              <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <SectionHeader title="Evolução diária de leads" />
+                <DailyLeadsChart rows={analytics.dailyLeads} />
+              </article>
 
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="mb-4 text-sm font-semibold text-slate-700">
-                SLA 1ª resposta por Canal
-              </h2>
-              <HorizontalBars
-                rows={analytics.slaByChannel.map((item) => ({
-                  canal: CHANNEL_LABEL[item.channel] ?? item.channel,
-                  p50: Math.round(item.p50Sec),
-                  p90: Math.round(item.p90Sec),
-                }))}
-                labelKey="canal"
-                valueKey="p90"
-                color="#14b8a6"
-              />
-              <p className="mt-3 text-xs text-slate-500">
-                Valor exibido na barra: p90 (segundos). O p50 aparece no rótulo.
-              </p>
-            </article>
+              <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <SectionHeader
+                  title="Tempo de 1ª resposta por canal"
+                  subtitle="Comparativo por canal (tempo alto = 90% respondem em até)."
+                />
+                <HorizontalBars
+                  rows={analytics.slaByChannel.map((item) => ({
+                    canal: CHANNEL_LABEL[item.channel] ?? item.channel,
+                    tempo: Math.round(item.p90Sec),
+                  }))}
+                  labelKey="canal"
+                  valueKey="tempo"
+                  color="#14b8a6"
+                />
+                <p className="mt-3 text-xs text-slate-500">
+                  A barra usa o tempo “alto” (90%). O tempo “típico” (50%) fica
+                  disponível no detalhe.
+                </p>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                        <th className="px-2 py-2">Canal</th>
+                        <th className="px-2 py-2">Tempo típico</th>
+                        <th className="px-2 py-2">Tempo alto</th>
+                        <th className="px-2 py-2">Dentro SLA</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.slaByChannel.map((row) => (
+                        <tr
+                          key={row.channel}
+                          className="border-b border-slate-100"
+                        >
+                          <td className="px-2 py-2">
+                            {CHANNEL_LABEL[row.channel] ?? row.channel}
+                          </td>
+                          <td className="px-2 py-2">
+                            {formatSeconds(row.p50Sec)}
+                          </td>
+                          <td className="px-2 py-2">
+                            {formatSeconds(row.p90Sec)}
+                          </td>
+                          <td className="px-2 py-2">{row.withinSlaPct}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+            </section>
           </section>
         ) : null}
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-4 text-sm font-semibold text-slate-700">
-            Backlog (sem resposta)
-          </h2>
+        {/* CAMADA 3: AÇÃO */}
+        <section className="space-y-3">
+          <SectionHeader
+            title="Ação"
+            subtitle="O que precisa de atenção agora: conversas aguardando resposta."
+          />
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
-                  <th className="px-2 py-2">Contato</th>
-                  <th className="px-2 py-2">Canal</th>
-                  <th className="px-2 py-2">Departamento</th>
-                  <th className="px-2 py-2">Responsável</th>
-                  <th className="px-2 py-2">Última mensagem</th>
-                  <th className="px-2 py-2">Min sem resposta</th>
-                </tr>
-              </thead>
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-700">
+                  Backlog sem resposta
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Clique em uma linha para abrir a conversa.
+                </p>
+              </div>
+              <div className="text-sm text-slate-600">
+                Total:{" "}
+                <span className="font-semibold text-slate-900">
+                  {backlogTotal}
+                </span>
+              </div>
+            </div>
 
-              <tbody>
-                {loading
-                  ? Array.from({ length: 5 }).map((_, index) => (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                    <th className="px-2 py-2">Contato</th>
+                    <th className="px-2 py-2">Canal</th>
+                    <th className="px-2 py-2">Departamento</th>
+                    <th className="px-2 py-2">Responsável</th>
+                    <th className="px-2 py-2">Última mensagem</th>
+                    <th className="px-2 py-2">Min sem resposta</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, index) => (
                       <tr key={index} className="border-b border-slate-100">
                         <td className="px-2 py-3" colSpan={6}>
                           <div className="h-6 animate-pulse rounded bg-slate-100" />
                         </td>
                       </tr>
                     ))
-                  : backlogPage.length === 0
-                    ? (
-                      <tr>
-                        <td
-                          className="px-2 py-8 text-center text-slate-500"
-                          colSpan={6}
-                        >
-                          Sem backlog para os filtros atuais.
+                  ) : backlogPage.length === 0 ? (
+                    <tr>
+                      <td
+                        className="px-2 py-8 text-center text-slate-500"
+                        colSpan={6}
+                      >
+                        Sem backlog para os filtros atuais.
+                      </td>
+                    </tr>
+                  ) : (
+                    backlogPage.map((item) => (
+                      <tr
+                        key={item.conversationId}
+                        className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+                        onClick={() =>
+                          navigate(`/inbox/chat/${item.conversationId}`)
+                        }
+                      >
+                        <td className="px-2 py-2">{item.contact}</td>
+                        <td className="px-2 py-2">
+                          {CHANNEL_LABEL[item.channel] ?? item.channel}
                         </td>
+                        <td className="px-2 py-2">{item.department}</td>
+                        <td className="px-2 py-2">{item.assignedTo}</td>
+                        <td className="px-2 py-2">
+                          <p>{item.lastMessageText}</p>
+                          <p className="text-xs text-slate-500">
+                            {new Date(item.lastMessageAt).toLocaleString()}
+                          </p>
+                        </td>
+                        <td className="px-2 py-2">{item.minutesWaiting}</td>
                       </tr>
-                      )
-                    : backlogPage.map((item) => (
-                        <tr
-                          key={item.conversationId}
-                          className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
-                          onClick={() => navigate(`/inbox/chat/${item.conversationId}`)}
-                        >
-                          <td className="px-2 py-2">{item.contact}</td>
-                          <td className="px-2 py-2">
-                            {CHANNEL_LABEL[item.channel] ?? item.channel}
-                          </td>
-                          <td className="px-2 py-2">{item.department}</td>
-                          <td className="px-2 py-2">{item.assignedTo}</td>
-                          <td className="px-2 py-2">
-                            <p>{item.lastMessageText}</p>
-                            <p className="text-xs text-slate-500">
-                              {new Date(item.lastMessageAt).toLocaleString()}
-                            </p>
-                          </td>
-                          <td className="px-2 py-2">{item.minutesWaiting}</td>
-                        </tr>
-                      ))}
-              </tbody>
-            </table>
-          </div>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-          <div className="mt-4 flex items-center justify-end gap-2 text-sm">
-            <button
-              type="button"
-              className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={page === 1}
-            >
-              Anterior
-            </button>
-            <span>
-              Página {page} de {totalPages}
-            </span>
-            <button
-              type="button"
-              className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-              disabled={page === totalPages}
-            >
-              Próxima
-            </button>
-          </div>
+            <div className="mt-4 flex items-center justify-end gap-2 text-sm">
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page === 1}
+              >
+                Anterior
+              </button>
+              <span>
+                Página {page} de {totalPages}
+              </span>
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+                onClick={() =>
+                  setPage((current) => Math.min(totalPages, current + 1))
+                }
+                disabled={page === totalPages}
+              >
+                Próxima
+              </button>
+            </div>
+          </section>
         </section>
       </div>
     </div>

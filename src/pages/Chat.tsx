@@ -20,6 +20,7 @@ import { SystemEventBubble } from "../components/chat/SystemEventBubble";
 import { MessageInput } from "../components/chat/MessageInput";
 import { ArrowDownIcon } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { TransferModal } from "../components/chat/TransferModal";
 
 type UiTag = { id: string; name: string; color: string };
 
@@ -53,7 +54,7 @@ function getMediaPreviewText(
 export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { authUser, profile } = useAuth();
+  const { authUser } = useAuth();
   const { clinicId, membership } = useClinic();
   const departmentId = membership?.department_id ?? null;
 
@@ -70,6 +71,9 @@ export const Chat: React.FC = () => {
   const [tagsLoading, setTagsLoading] = useState(false);
   const [tagsSavingId, setTagsSavingId] = useState<string | null>(null);
   const [acceptingConversation, setAcceptingConversation] = useState(false);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [transferringConversation, setTransferringConversation] =
+    useState(false);
 
   const {
     messages,
@@ -237,6 +241,117 @@ export const Chat: React.FC = () => {
     );
   }, []);
 
+  const loadConversation = useCallback(async () => {
+    if (!id) return;
+    if (!clinicId || !departmentId) {
+      setConversation(null);
+      setLoadingConversation(false);
+      return;
+    }
+
+    setLoadingConversation(true);
+
+    const { data, error } = await supabase
+      .from("conversations")
+      .select(
+        `
+      id,
+      status,
+      channel,
+      last_message_at,
+      created_at,
+      assigned_user_id,
+      contacts:contact_id (
+        id,
+        name,
+        phone
+      ),
+      messages (
+        id,
+        text,
+        sent_at,
+        direction,
+        type
+      ),
+      clinic_id,
+      department_id,
+      conversation_tags (
+        tag_id,
+        tags (
+          id,
+          name,
+          color
+        )
+      )
+    `,
+      )
+      .eq("id", id)
+      .eq("clinic_id", clinicId)
+      .eq("department_id", departmentId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Erro ao buscar conversa:", error);
+      setLoadingConversation(false);
+      return;
+    }
+
+    if (!data) {
+      setConversation(null);
+      setLoadingConversation(false);
+      return;
+    }
+
+    const messagesRows =
+      (data.messages as {
+        id: string;
+        text: string | null;
+        sent_at: string | null;
+        direction: string | null;
+        type?: string | null;
+      }[]) ?? [];
+
+    const last = messagesRows[messagesRows.length - 1];
+
+    const rawContacts: any = (data as any).contacts;
+    const contactRow = Array.isArray(rawContacts)
+      ? rawContacts[0]
+      : rawContacts;
+
+    const ct = ((data as any).conversation_tags as any[]) ?? [];
+    const tagsFromConv: UiTag[] = ct
+      .map((row) => row?.tags)
+      .flat()
+      .filter(Boolean)
+      .map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        color: t.color ?? "#0A84FF",
+      }));
+
+    const mappedConversation: Conversation = {
+      id: (data as any).id,
+      clinicId: (data as any).clinic_id ?? undefined,
+      channel: (data as any).channel as Channel,
+      status: ((data as any).status as Conversation["status"]) ?? "pending",
+      contactName: contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
+      contactNumber: contactRow?.phone ?? "",
+      lastMessage: last?.text ?? "",
+      lastMessageType: (last as any)?.type ?? "text",
+      lastTimestamp:
+        last?.sent_at ??
+        (data as any).last_message_at ??
+        new Date().toISOString(),
+      unreadCount: 0,
+      tags: tagsFromConv,
+      assignedTo: (data as any).assigned_user_id ?? undefined,
+    };
+
+    setSelectedTags(tagsFromConv);
+    setConversation(mappedConversation);
+    setLoadingConversation(false);
+  }, [id, clinicId, departmentId]);
+
   useEffect(() => {
     handleScrollCheck();
   }, [timelineItems.length, handleScrollCheck]);
@@ -253,119 +368,8 @@ export const Chat: React.FC = () => {
   }, [handleScrollCheck]);
 
   useEffect(() => {
-    if (!id) return;
-    if (!clinicId || !departmentId) {
-      setConversation(null);
-      setLoadingConversation(false);
-      return;
-    }
-
-    const fetchConversation = async () => {
-      setLoadingConversation(true);
-
-      const { data, error } = await supabase
-        .from("conversations")
-        .select(
-          `
-          id,
-          status,
-          channel,
-          last_message_at,
-          created_at,
-          assigned_user_id,
-          contacts:contact_id (
-            id,
-            name,
-            phone
-          ),
-          messages (
-            id,
-            text,
-            sent_at,
-            direction,
-            type
-          ),
-          clinic_id,
-          conversation_tags (
-            tag_id,
-            tags (
-              id,
-              name,
-              color
-            )
-          )
-        `,
-        )
-        .eq("id", id)
-        .eq("clinic_id", clinicId)
-        .eq("department_id", departmentId)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Erro ao buscar conversa:", error);
-        setLoadingConversation(false);
-        return;
-      }
-
-      if (!data) {
-        setConversation(null);
-        setLoadingConversation(false);
-        return;
-      }
-
-      const messagesRows =
-        (data.messages as {
-          id: string;
-          text: string | null;
-          sent_at: string | null;
-          direction: string | null;
-          type?: string | null;
-        }[]) ?? [];
-
-      const last = messagesRows[messagesRows.length - 1];
-
-      const rawContacts: any = (data as any).contacts;
-      const contactRow = Array.isArray(rawContacts)
-        ? rawContacts[0]
-        : rawContacts;
-
-      const ct = ((data as any).conversation_tags as any[]) ?? [];
-      const tagsFromConv: UiTag[] = ct
-        .map((row) => row?.tags)
-        .flat()
-        .filter(Boolean)
-        .map((t: any) => ({
-          id: t.id,
-          name: t.name,
-          color: t.color ?? "#0A84FF",
-        }));
-
-      const mappedConversation: Conversation = {
-        id: (data as any).id,
-        clinicId: (data as any).clinic_id ?? undefined,
-        channel: (data as any).channel as Channel,
-        status: ((data as any).status as Conversation["status"]) ?? "pending",
-        contactName:
-          contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
-        contactNumber: contactRow?.phone ?? "",
-        lastMessage: last?.text ?? "",
-        lastMessageType: (last as any)?.type ?? "text",
-        lastTimestamp:
-          last?.sent_at ??
-          (data as any).last_message_at ??
-          new Date().toISOString(),
-        unreadCount: 0,
-        tags: tagsFromConv,
-        assignedTo: (data as any).assigned_user_id ?? undefined,
-      };
-
-      setSelectedTags(tagsFromConv);
-      setConversation(mappedConversation);
-      setLoadingConversation(false);
-    };
-
-    fetchConversation();
-  }, [id, clinicId, departmentId]);
+    loadConversation();
+  }, [loadConversation]);
 
   useEffect(() => {
     const cid = (conversation as any)?.clinicId as string | undefined;
@@ -396,6 +400,30 @@ export const Chat: React.FC = () => {
   }, [conversation]);
 
   useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`rt:conversations:${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversations",
+          filter: `id=eq.${id}`,
+        },
+        () => {
+          loadConversation();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id, loadConversation]);
+
+  useEffect(() => {
     if (!conversation?.id) return;
 
     reloadConversationTags(conversation.id);
@@ -420,14 +448,16 @@ export const Chat: React.FC = () => {
   }, [conversation?.id, reloadConversationTags]);
 
   const handleAcceptConversation = useCallback(async () => {
-    if (!id || !authUser) return;
+    if (!id) return;
 
     setAcceptingConversation(true);
 
-    const { error } = await supabase
-      .from("conversations")
-      .update({ assigned_user_id: authUser.id, status: "open" })
-      .eq("id", id);
+    const { data, error } = await supabase.functions.invoke(
+      "accept-conversation",
+      {
+        body: { conversationId: id },
+      },
+    );
 
     if (error) {
       console.error("Erro ao aceitar conversa:", error);
@@ -435,39 +465,55 @@ export const Chat: React.FC = () => {
       return;
     }
 
-    setConversation((prev) =>
-      prev
-        ? {
-            ...prev,
-            assignedTo: authUser.id,
-            status: "open",
-          }
-        : prev,
-    );
-
-    const actorName =
-      profile?.name ??
-      (authUser as any).user_metadata?.name ??
-      (authUser as any).email ??
-      "Atendente";
-
-    const { error: logError } = await supabase
-      .from("conversation_events")
-      .insert({
-        conversation_id: id,
-        event_type: "conversation_accepted",
-        performed_by: authUser.id,
-        metadata: {
-          performed_by_name: actorName,
-        },
-      });
-
-    if (logError) {
-      console.warn("Erro ao registrar evento da conversa:", logError);
+    const updated = (data as any)?.conversation;
+    if (updated) {
+      setConversation((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: updated.status,
+              assignedTo: updated.assigned_user_id ?? undefined,
+            }
+          : prev,
+      );
     }
 
+    await loadConversation();
     setAcceptingConversation(false);
-  }, [authUser, id, profile]);
+  }, [id, loadConversation]);
+
+  const handleTransferConversation = useCallback(
+    async (target: { departmentId: string }) => {
+      if (!id) return;
+      if (!target.departmentId) return;
+
+      setTransferringConversation(true);
+
+      const { data, error } = await supabase.functions.invoke(
+        "transfer-conversation",
+        {
+          body: {
+            conversationId: id,
+            toDepartmentId: target.departmentId,
+          },
+        },
+      );
+
+      console.log(data);
+
+      if (error) {
+        console.error("Erro ao transferir conversa:", error);
+        setTransferringConversation(false);
+        return;
+      }
+
+      setIsTransferOpen(false);
+      setTransferringConversation(false);
+
+      navigate("/inbox");
+    },
+    [id, navigate],
+  );
 
   const addTagToConversation = async (
     conversationId: string,
@@ -722,6 +768,8 @@ export const Chat: React.FC = () => {
         onBack={() => navigate("/inbox")}
         onManageTags={() => setIsManageTagsOpen(true)}
         onAccept={handleAcceptConversation}
+        onRefresh={loadConversation}
+        onTransfer={() => setIsTransferOpen(true)}
         acceptDisabled={
           acceptingConversation ||
           !authUser ||
@@ -852,6 +900,15 @@ export const Chat: React.FC = () => {
           </div>
         </div>
       )}
+
+      <TransferModal
+        open={isTransferOpen}
+        onClose={() => setIsTransferOpen(false)}
+        onConfirm={handleTransferConversation}
+        loading={transferringConversation}
+        clinicId={clinicId}
+        currentDepartmentId={departmentId}
+      />
 
       <MessageInput onSend={handleSendMessage} disabled={!canReply} />
     </div>

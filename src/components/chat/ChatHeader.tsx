@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { Conversation } from "../../types";
 import { Button } from "../ui/Button";
 import { TbMessageCheck } from "react-icons/tb";
@@ -12,95 +12,141 @@ interface ChatHeaderProps {
   conversation: Conversation;
   onBack: () => void;
   onManageTags?: () => void;
-  onAccept?: () => void;
+  onAccept?: () => Promise<void> | void;
+  onTransfer?: () => void;
+  onSearch?: () => void;
+  onRefresh?: () => Promise<void> | void;
   acceptDisabled?: boolean;
+  transferDisabled?: boolean;
 }
+
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
   conversation,
   onBack,
   onManageTags,
   onAccept,
+  onTransfer,
+  onSearch,
+  onRefresh,
   acceptDisabled = false,
+  transferDisabled = false,
 }) => {
-  const initials = conversation.contactName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const [isAccepting, setIsAccepting] = useState(false);
+
+  const initials = useMemo(() => {
+    const name = (conversation.contactName ?? "").trim();
+    if (!name) return "--";
+    return name
+      .split(" ")
+      .filter(Boolean)
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  }, [conversation.contactName]);
+
   const avatar = conversation.contactAvatar;
+
+  const handleAccept = async () => {
+    if (!onAccept || acceptDisabled || isAccepting) return;
+
+    try {
+      setIsAccepting(true);
+      await onAccept();
+      await onRefresh?.();
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  const acceptIsDisabled = acceptDisabled || isAccepting;
+
   return (
     <div className="sticky top-0 z-30 h-20 border-b border-[#E5E7EB] bg-white p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="p-2 hover:bg-[#E5E7EB] rounded-lg transition-colors"
+            className="rounded-lg p-2 transition-colors hover:bg-[#E5E7EB]"
           >
-            <ArrowLeftIcon className="w-5 h-5 text-[#1E1E1E]" />
+            <ArrowLeftIcon className="h-5 w-5 text-[#1E1E1E]" />
           </button>
-          <div className="w-10 h-10 rounded-full bg-[#0A84FF] text-white flex items-center justify-center font-medium overflow-hidden">
+
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#0A84FF] font-medium text-white">
             {avatar ? (
               <img
                 src={avatar}
                 alt={`Foto de ${conversation.contactName}`}
-                className="w-full h-full object-cover"
+                className="h-full w-full object-cover"
               />
             ) : (
               initials
             )}
           </div>
+
           <div>
             <h2 className="font-semibold text-[#1E1E1E]">
               {conversation.contactName}
             </h2>
-            <div className="flex items-center gap-2 mt-0.5">
+
+            <div className="mt-0.5 flex items-center gap-2">
               {conversation.contactNumber && (
                 <span className="text-xs text-gray-500">
                   {conversation.contactNumber}
                 </span>
               )}
-              {conversation.tags &&
-                conversation.tags.map((tag) => (
-                  <span
-                    className="inline-flex rounded-full px-3 py-1 text-xs font-medium text-white select-none"
-                    style={{ backgroundColor: tag.color }}
-                  >
-                    {tag.name}
-                  </span>
-                ))}
+
+              {conversation.tags?.map((tag) => (
+                <span
+                  key={tag.id ?? tag.name}
+                  className="inline-flex select-none rounded-full px-3 py-1 text-xs font-medium text-white"
+                  style={{ backgroundColor: tag.color }}
+                >
+                  {tag.name}
+                </span>
+              ))}
             </div>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
           <CustomTooltip text="Buscar na conversa">
-            <Button variant="ghost" size="sm">
-              <FiSearch className="w-5 h-5" />
+            <Button variant="ghost" size="sm" onClick={onSearch}>
+              <FiSearch className="h-5 w-5" />
             </Button>
           </CustomTooltip>
-          <CustomTooltip text="Traferir conversa">
-            <Button variant="ghost" size="sm">
-              <HiOutlineSwitchHorizontal className="w-5 h-5" />
-            </Button>
-          </CustomTooltip>
-          <CustomTooltip text="Aceitar conversa">
+
+          <CustomTooltip text="Transferir conversa">
             <Button
               variant="ghost"
               size="sm"
-              onClick={onAccept}
-              disabled={acceptDisabled}
-              aria-disabled={acceptDisabled}
+              onClick={onTransfer}
+              disabled={transferDisabled || !onTransfer}
+              aria-disabled={transferDisabled || !onTransfer}
             >
-              <TbMessageCheck className="w-5 h-5" />
+              <HiOutlineSwitchHorizontal className="h-5 w-5" />
             </Button>
           </CustomTooltip>
+
+          <CustomTooltip
+            text={isAccepting ? "Aceitando..." : "Aceitar conversa"}
+          >
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleAccept}
+              disabled={acceptIsDisabled || !onAccept}
+              aria-disabled={acceptIsDisabled || !onAccept}
+            >
+              <TbMessageCheck className="h-5 w-5" />
+            </Button>
+          </CustomTooltip>
+
           <CustomDropdown
             trigger={
-              // <CustomTooltip text="Mais opções">
               <Button variant="ghost" size="sm">
-                <MoreVerticalIcon className="w-5 h-5" />
+                <MoreVerticalIcon className="h-5 w-5" />
               </Button>
-              // </CustomTooltip>
             }
             items={[
               {

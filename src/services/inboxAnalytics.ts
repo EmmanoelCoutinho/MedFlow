@@ -2,8 +2,8 @@ import { supabase } from "../lib/supabaseClient";
 
 export type AnalyticsFilters = {
   clinicId: string;
-  start: string;
-  end: string;
+  start: string; // ISO
+  end: string; // ISO
   channels: string[];
   departmentId?: string;
   assignedUserId?: string;
@@ -11,12 +11,13 @@ export type AnalyticsFilters = {
 
 type ConversationRow = {
   id: string;
-  clinic_id: string;
   channel: string | null;
   department_id: string | null;
   assigned_user_id: string | null;
   status: string | null;
   created_at: string;
+  last_message_at?: string | null;
+  contact_id?: string | null;
 };
 
 type MessageRow = {
@@ -57,104 +58,176 @@ export type AnalyticsResponse = {
   funnelByChannel: Array<{ channel: string; converted: number; lost: number }>;
 };
 
-const applyConversationOptionalFilters = <T extends { channel: string | null; department_id: string | null; assigned_user_id: string | null }>(
-  query: TQuery<T>,
-  filters: AnalyticsFilters,
-): TQuery<T> => {
-  let nextQuery = query;
+type DepartmentRow = { id: string; name: string };
+type ClinicUserRow = { user_id: string; name: string | null };
+type ContactRow = { id: string; name: string | null; phone: string | null };
 
-  if (filters.channels.length > 0) {
-    nextQuery = nextQuery.in("channel", filters.channels);
-  }
-  if (filters.departmentId) {
-    nextQuery = nextQuery.eq("department_id", filters.departmentId);
-  }
-  if (filters.assignedUserId) {
-    nextQuery = nextQuery.eq("assigned_user_id", filters.assignedUserId);
-  }
-
-  return nextQuery;
+/**
+ * Helpers
+ */
+const chunkArray = <T>(arr: T[], size: number) => {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size)
+    chunks.push(arr.slice(i, i + size));
+  return chunks;
 };
-
-type TQuery<T> = ReturnType<typeof supabase.from<T>>;
 
 const percentile = (values: number[], p: number) => {
   if (!values.length) return null;
-
   const sorted = [...values].sort((a, b) => a - b);
   const index = (sorted.length - 1) * p;
   const low = Math.floor(index);
   const high = Math.ceil(index);
-
   if (low === high) return sorted[low];
   return sorted[low] + (sorted[high] - sorted[low]) * (index - low);
 };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
+const toError = (err: any, fallback: string) => {
+  const msg =
+    err?.message ||
+    err?.error_description ||
+    err?.hint ||
+    err?.details ||
+    fallback;
+  return new Error(typeof msg === "string" ? msg : fallback);
+};
+
+/**
+ * Aplica filtros opcionais com segurança.
+ */
+const applyConversationOptionalFilters = (
+  query: any,
+  filters: AnalyticsFilters,
+) => {
+  let next = query;
+
+  if (filters.channels?.length) next = next.in("channel", filters.channels);
+  if (filters.departmentId)
+    next = next.eq("department_id", filters.departmentId);
+  if (filters.assignedUserId)
+    next = next.eq("assigned_user_id", filters.assignedUserId);
+
+  return next;
+};
+
+const fetchMessagesByConversationIds = async (
+  conversationIds: string[],
+  selectColumns: string,
+  options?: { start?: string; end?: string; orderAsc?: boolean },
+): Promise<MessageRow[]> => {
+  if (!conversationIds.length) return [];
+
+  const batches = chunkArray(conversationIds, 500);
+  const all: MessageRow[] = [];
+
+  for (const ids of batches) {
+    let q = supabase
+      .from("messages")
+      .select(selectColumns)
+      .in("conversation_id", ids);
+
+    if (options?.start) q = q.gte("created_at", options.start);
+    if (options?.end) q = q.lt("created_at", options.end);
+
+    if (options?.orderAsc === true)
+      q = q.order("created_at", { ascending: true });
+    if (options?.orderAsc === false)
+      q = q.order("created_at", { ascending: false });
+
+    const { data, error } = await q;
+    if (error) throw toError(error, "Falha ao buscar mensagens.");
+
+    all.push(...((data ?? []) as unknown as MessageRow[]));
+  }
+
+  return all;
+};
+
+const fetchEventsByConversationIds = async (
+  conversationIds: string[],
+  selectColumns: string,
+  options?: { start?: string; end?: string },
+): Promise<ConversationEventRow[]> => {
+  if (!conversationIds.length) return [];
+
+  const batches = chunkArray(conversationIds, 500);
+  const all: ConversationEventRow[] = [];
+
+  for (const ids of batches) {
+    let q = supabase
+      .from("conversation_events")
+      .select(selectColumns)
+      .in("conversation_id", ids);
+
+    if (options?.start) q = q.gte("created_at", options.start);
+    if (options?.end) q = q.lt("created_at", options.end);
+
+    const { data, error } = await q;
+    if (error) throw toError(error, "Falha ao buscar eventos.");
+
+    all.push(...((data ?? []) as unknown as ConversationEventRow[]));
+  }
+
+  return all;
+};
+
 export const fetchInboxAnalytics = async (
   filters: AnalyticsFilters,
 ): Promise<AnalyticsResponse> => {
+  // 1) Conversations
   const baseConversationsQuery = supabase
     .from("conversations")
-    .select(
-      "id,clinic_id,channel,department_id,assigned_user_id,status,created_at",
-    )
+    .select("id,channel,department_id,assigned_user_id,status,created_at")
     .eq("clinic_id", filters.clinicId)
     .gte("created_at", filters.start)
     .lt("created_at", filters.end);
 
-  const { data: conversationsData, error: convError } = await applyConversationOptionalFilters(
-    baseConversationsQuery,
-    filters,
-  );
+  const { data: conversationsData, error: convError } =
+    await applyConversationOptionalFilters(baseConversationsQuery, filters);
 
-  if (convError) throw convError;
+  if (convError) throw toError(convError, "Falha ao buscar conversas.");
 
-  const conversations: ConversationRow[] = (conversationsData ?? []) as ConversationRow[];
-  const conversationIds = conversations.map((conversation) => conversation.id);
+  const conversations: ConversationRow[] = (conversationsData ??
+    []) as unknown as ConversationRow[];
+  const conversationIds = conversations.map((c) => c.id);
 
-  const [departmentsRes, messagesRes, eventsRes] = await Promise.all([
-    supabase
-      .from("departments")
-      .select("id,name")
-      .eq("clinic_id", filters.clinicId),
-    conversationIds.length
-      ? supabase
-          .from("messages")
-          .select("conversation_id,direction,created_at")
-          .in("conversation_id", conversationIds)
-          .gte("created_at", filters.start)
-          .lt("created_at", filters.end)
-      : Promise.resolve({ data: [], error: null }),
-    conversationIds.length
-      ? supabase
-          .from("conversation_events")
-          .select("conversation_id,event_type,metadata,created_at")
-          .in("conversation_id", conversationIds)
-          .gte("created_at", filters.start)
-          .lt("created_at", filters.end)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  // 2) Departments map
+  const { data: departmentsData, error: depErr } = await supabase
+    .from("departments")
+    .select("id,name")
+    .eq("clinic_id", filters.clinicId);
 
-  if (departmentsRes.error) throw departmentsRes.error;
-  if (messagesRes.error) throw messagesRes.error;
-  if (eventsRes.error) throw eventsRes.error;
+  if (depErr) throw toError(depErr, "Falha ao buscar departamentos.");
 
   const departmentsMap = new Map(
-    (departmentsRes.data ?? []).map((department) => [department.id, department.name]),
+    ((departmentsData ?? []) as DepartmentRow[]).map((d) => [d.id, d.name]),
   );
-  const messages = (messagesRes.data ?? []) as MessageRow[];
-  const events = (eventsRes.data ?? []) as ConversationEventRow[];
 
+  // 3) Messages in period (counts)
+  const messages = await fetchMessagesByConversationIds(
+    conversationIds,
+    "conversation_id,direction,created_at",
+    { start: filters.start, end: filters.end, orderAsc: false },
+  );
+
+  // 4) Events in period (SLA + funil)
+  const events = await fetchEventsByConversationIds(
+    conversationIds,
+    "conversation_id,event_type,metadata,created_at",
+    { start: filters.start, end: filters.end },
+  );
+
+  // Aggregations: leads by channel/department/day
   const leadsByChannelMap = new Map<string, number>();
   const leadsByDepartmentMap = new Map<string, number>();
   const dailyLeadsMap = new Map<string, number>();
 
-  conversations.forEach((conversation) => {
+  for (const conversation of conversations) {
     const channel = conversation.channel ?? "unknown";
     const department = conversation.department_id
-      ? departmentsMap.get(conversation.department_id) ?? "Sem departamento"
+      ? (departmentsMap.get(conversation.department_id) ?? "Sem departamento")
       : "Sem departamento";
     const day = conversation.created_at.slice(0, 10);
 
@@ -164,21 +237,22 @@ export const fetchInboxAnalytics = async (
       (leadsByDepartmentMap.get(department) ?? 0) + 1,
     );
     dailyLeadsMap.set(day, (dailyLeadsMap.get(day) ?? 0) + 1);
-  });
+  }
 
   const inboundMessages = messages.filter(
-    (message) => message.direction === "inbound",
+    (m) => m.direction === "inbound",
   ).length;
   const outboundMessages = messages.filter(
-    (message) => message.direction === "outbound",
-  ).length;
-  const activeConversations = conversations.filter(
-    (conversation) =>
-      conversation.status === "open" || conversation.status === "pending",
+    (m) => m.direction === "outbound",
   ).length;
 
-  const conversationMap = new Map(conversations.map((conversation) => [conversation.id, conversation]));
-  const slaEvents = events.filter((event) => event.event_type === "sla.first_response");
+  const activeConversations = conversations.filter(
+    (c) => c.status === "open" || c.status === "pending",
+  ).length;
+
+  // SLA: prefer events; fallback messages
+  const conversationMap = new Map(conversations.map((c) => [c.id, c]));
+  const slaEvents = events.filter((e) => e.event_type === "sla.first_response");
 
   const responseSecondsByConversation = new Map<
     string,
@@ -186,107 +260,109 @@ export const fetchInboxAnalytics = async (
   >();
 
   if (slaEvents.length > 0) {
-    slaEvents.forEach((event) => {
-      const conversation = conversationMap.get(event.conversation_id);
-      const seconds = Number(event.metadata?.seconds);
+    for (const e of slaEvents) {
+      const conv = conversationMap.get(e.conversation_id);
+      if (!conv) continue;
 
-      if (!conversation || Number.isNaN(seconds) || seconds < 0) return;
+      const seconds = Number(e.metadata?.seconds);
+      if (Number.isNaN(seconds) || seconds < 0) continue;
 
-      responseSecondsByConversation.set(event.conversation_id, {
-        channel: conversation.channel ?? "unknown",
+      responseSecondsByConversation.set(e.conversation_id, {
+        channel: conv.channel ?? "unknown",
         seconds,
       });
-    });
+    }
   } else if (conversationIds.length > 0) {
-    const { data: allMessagesData, error: allMessagesError } = await supabase
-      .from("messages")
-      .select("conversation_id,direction,created_at")
-      .in("conversation_id", conversationIds)
-      .order("created_at", { ascending: true });
+    // fallback: first inbound/outbound (sem filtro de período)
+    const allMessages = await fetchMessagesByConversationIds(
+      conversationIds,
+      "conversation_id,direction,created_at",
+      { orderAsc: true },
+    );
 
-    if (allMessagesError) throw allMessagesError;
-
-    const allMessages = (allMessagesData ?? []) as MessageRow[];
     const firstInboundMap = new Map<string, string>();
     const firstOutboundMap = new Map<string, string>();
 
-    allMessages.forEach((message) => {
-      if (message.direction === "inbound" && !firstInboundMap.has(message.conversation_id)) {
-        firstInboundMap.set(message.conversation_id, message.created_at);
+    for (const m of allMessages) {
+      if (
+        m.direction === "inbound" &&
+        !firstInboundMap.has(m.conversation_id)
+      ) {
+        firstInboundMap.set(m.conversation_id, m.created_at);
       }
-
-      if (message.direction === "outbound" && !firstOutboundMap.has(message.conversation_id)) {
-        firstOutboundMap.set(message.conversation_id, message.created_at);
+      if (
+        m.direction === "outbound" &&
+        !firstOutboundMap.has(m.conversation_id)
+      ) {
+        firstOutboundMap.set(m.conversation_id, m.created_at);
       }
-    });
+    }
 
-    conversations.forEach((conversation) => {
-      const inboundAt = firstInboundMap.get(conversation.id);
-      const outboundAt = firstOutboundMap.get(conversation.id);
-
-      if (!inboundAt || !outboundAt) return;
+    for (const conv of conversations) {
+      const inboundAt = firstInboundMap.get(conv.id);
+      const outboundAt = firstOutboundMap.get(conv.id);
+      if (!inboundAt || !outboundAt) continue;
 
       const seconds =
         (new Date(outboundAt).getTime() - new Date(inboundAt).getTime()) / 1000;
+      if (Number.isNaN(seconds) || seconds < 0) continue;
 
-      if (seconds < 0) return;
-
-      responseSecondsByConversation.set(conversation.id, {
-        channel: conversation.channel ?? "unknown",
+      responseSecondsByConversation.set(conv.id, {
+        channel: conv.channel ?? "unknown",
         seconds,
       });
-    });
+    }
   }
 
   const slaByChannelMap = new Map<string, number[]>();
-
   responseSecondsByConversation.forEach(({ channel, seconds }) => {
     const values = slaByChannelMap.get(channel) ?? [];
     values.push(seconds);
     slaByChannelMap.set(channel, values);
   });
 
-  const slaByChannel = Array.from(slaByChannelMap.entries()).map(
-    ([channel, values]) => ({
-      channel,
-      p50Sec: round2(percentile(values, 0.5) ?? 0),
-      p90Sec: round2(percentile(values, 0.9) ?? 0),
-      withinSlaPct: round2(
-        (values.filter((value) => value <= 120).length / values.length) * 100,
-      ),
-    }),
-  );
+  const slaByChannel: SlaByChannel[] = Array.from(
+    slaByChannelMap.entries(),
+  ).map(([channel, values]) => ({
+    channel,
+    p50Sec: round2(percentile(values, 0.5) ?? 0),
+    p90Sec: round2(percentile(values, 0.9) ?? 0),
+    withinSlaPct: round2(
+      (values.filter((v) => v <= 120).length / values.length) * 100,
+    ),
+  }));
 
   const allSlaValues = Array.from(responseSecondsByConversation.values()).map(
-    (item) => item.seconds,
+    (x) => x.seconds,
   );
 
+  // Funil básico
   const funnelByChannelMap = new Map<
     string,
     { converted: number; lost: number }
   >();
-
-  conversations.forEach((conversation) => {
-    const channel = conversation.channel ?? "unknown";
-    if (!funnelByChannelMap.has(channel)) {
+  for (const c of conversations) {
+    const channel = c.channel ?? "unknown";
+    if (!funnelByChannelMap.has(channel))
       funnelByChannelMap.set(channel, { converted: 0, lost: 0 });
-    }
-  });
+  }
 
-  events.forEach((event) => {
-    if (event.event_type !== "lead.converted" && event.event_type !== "lead.lost") {
-      return;
-    }
+  for (const e of events) {
+    if (e.event_type !== "lead.converted" && e.event_type !== "lead.lost")
+      continue;
 
-    const conversation = conversationMap.get(event.conversation_id);
-    const channel = conversation?.channel ?? "unknown";
-    const current = funnelByChannelMap.get(channel) ?? { converted: 0, lost: 0 };
+    const conv = conversationMap.get(e.conversation_id);
+    const channel = conv?.channel ?? "unknown";
 
-    if (event.event_type === "lead.converted") current.converted += 1;
-    if (event.event_type === "lead.lost") current.lost += 1;
+    const current = funnelByChannelMap.get(channel) ?? {
+      converted: 0,
+      lost: 0,
+    };
+    if (e.event_type === "lead.converted") current.converted += 1;
+    if (e.event_type === "lead.lost") current.lost += 1;
 
     funnelByChannelMap.set(channel, current);
-  });
+  }
 
   return {
     kpis: {
@@ -298,7 +374,7 @@ export const fetchInboxAnalytics = async (
       p90FirstResponseSec: percentile(allSlaValues, 0.9),
       withinSlaPct: allSlaValues.length
         ? round2(
-            (allSlaValues.filter((value) => value <= 120).length /
+            (allSlaValues.filter((v) => v <= 120).length /
               allSlaValues.length) *
               100,
           )
@@ -315,10 +391,10 @@ export const fetchInboxAnalytics = async (
       .sort((a, b) => a.day.localeCompare(b.day)),
     slaByChannel,
     funnelByChannel: Array.from(funnelByChannelMap.entries()).map(
-      ([channel, value]) => ({
+      ([channel, v]) => ({
         channel,
-        converted: value.converted,
-        lost: value.lost,
+        converted: v.converted,
+        lost: v.lost,
       }),
     ),
   };
@@ -335,81 +411,122 @@ export type BacklogItem = {
   minutesWaiting: number;
 };
 
+/**
+ * Backlog sem joins (pra não depender de relacionamento do Supabase).
+ */
 export const fetchBacklog = async (
   filters: AnalyticsFilters,
 ): Promise<BacklogItem[]> => {
   const baseConversationsQuery = supabase
     .from("conversations")
     .select(
-      "id,channel,department_id,assigned_user_id,status,last_message_at,contacts:contact_id(first_name,phone),departments:department_id(name),clinic_users:assigned_user_id(name,user_id)",
+      "id,channel,department_id,assigned_user_id,status,last_message_at,contact_id",
     )
     .eq("clinic_id", filters.clinicId)
     .in("status", ["open", "pending"])
     .not("last_message_at", "is", null)
     .order("last_message_at", { ascending: false })
-    .limit(200);
+    .limit(500);
 
-  const { data: conversationsData, error: conversationsError } =
-    await applyConversationOptionalFilters(baseConversationsQuery, filters);
+  const { data, error } = await applyConversationOptionalFilters(
+    baseConversationsQuery,
+    filters,
+  );
+  if (error) throw toError(error, "Falha ao buscar backlog (conversas).");
 
-  if (conversationsError) throw conversationsError;
+  const conversations = (data ?? []) as unknown as ConversationRow[];
+  if (!conversations.length) return [];
 
-  const conversations = conversationsData ?? [];
+  const conversationIds = conversations.map((c) => c.id);
 
-  if (!conversations.length) {
-    return [];
+  // last message por conversa (desc)
+  const messages = await fetchMessagesByConversationIds(
+    conversationIds,
+    "conversation_id,direction,created_at,text",
+    { orderAsc: false },
+  );
+
+  const lastMessageByConversation = new Map<string, MessageRow>();
+  for (const m of messages) {
+    if (!lastMessageByConversation.has(m.conversation_id)) {
+      lastMessageByConversation.set(m.conversation_id, m);
+    }
   }
 
-  const conversationIds = conversations.map((conversation) => conversation.id);
+  // buscar departamentos, users e contatos por IDs (sem relacionamento)
+  const departmentIds = Array.from(
+    new Set(
+      conversations.map((c) => c.department_id).filter(Boolean) as string[],
+    ),
+  );
+  const userIds = Array.from(
+    new Set(
+      conversations.map((c) => c.assigned_user_id).filter(Boolean) as string[],
+    ),
+  );
+  const contactIds = Array.from(
+    new Set(conversations.map((c) => c.contact_id).filter(Boolean) as string[]),
+  );
 
-  const { data: messagesData, error: messagesError } = await supabase
-    .from("messages")
-    .select("conversation_id,direction,created_at,text")
-    .in("conversation_id", conversationIds)
-    .order("created_at", { ascending: false });
+  const [depsRes, usersRes, contactsRes] = await Promise.all([
+    departmentIds.length
+      ? supabase.from("departments").select("id,name").in("id", departmentIds)
+      : Promise.resolve({ data: [], error: null }),
+    userIds.length
+      ? supabase
+          .from("clinic_users")
+          .select("user_id,name")
+          .in("user_id", userIds)
+      : Promise.resolve({ data: [], error: null }),
+    contactIds.length
+      ? supabase.from("contacts").select("id,name,phone").in("id", contactIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
-  if (messagesError) throw messagesError;
+  if (depsRes.error)
+    throw toError(depsRes.error, "Falha ao buscar departamentos (backlog).");
+  if (usersRes.error)
+    throw toError(usersRes.error, "Falha ao buscar atendentes (backlog).");
+  if (contactsRes.error)
+    throw toError(contactsRes.error, "Falha ao buscar contatos (backlog).");
 
-  const messages = (messagesData ?? []) as MessageRow[];
-  const lastMessageByConversation = new Map<string, MessageRow>();
+  const depsMap = new Map(
+    ((depsRes.data ?? []) as DepartmentRow[]).map((d) => [d.id, d.name]),
+  );
+  const usersMap = new Map(
+    ((usersRes.data ?? []) as ClinicUserRow[]).map((u) => [u.user_id, u.name]),
+  );
+  const contactsMap = new Map(
+    ((contactsRes.data ?? []) as ContactRow[]).map((c) => [c.id, c]),
+  );
 
-  messages.forEach((message) => {
-    if (!lastMessageByConversation.has(message.conversation_id)) {
-      lastMessageByConversation.set(message.conversation_id, message);
-    }
-  });
+  const now = Date.now();
 
   return conversations
-    .map((conversation) => {
-      const lastMessage = lastMessageByConversation.get(conversation.id);
-
-      if (!lastMessage || lastMessage.direction !== "inbound") {
-        return null;
-      }
+    .map((c) => {
+      const lastMessage = lastMessageByConversation.get(c.id);
+      if (!lastMessage || lastMessage.direction !== "inbound") return null;
 
       const minutesWaiting =
-        (Date.now() - new Date(lastMessage.created_at).getTime()) / 1000 / 60;
+        (now - new Date(lastMessage.created_at).getTime()) / 1000 / 60;
+
+      const contact = c.contact_id ? contactsMap.get(c.contact_id) : null;
 
       return {
-        conversationId: conversation.id,
-        contact:
-          (conversation.contacts as { first_name?: string; phone?: string })
-            ?.first_name ??
-          (conversation.contacts as { first_name?: string; phone?: string })
-            ?.phone ??
-          "Contato sem nome",
-        channel: conversation.channel ?? "unknown",
-        department:
-          (conversation.departments as { name?: string })?.name ??
-          "Sem departamento",
-        assignedTo:
-          (conversation.clinic_users as { name?: string })?.name ??
-          "Não atribuído",
+        conversationId: c.id,
+        contact: contact?.name ?? contact?.phone ?? "Contato sem nome",
+        channel: c.channel ?? "unknown",
+        department: c.department_id
+          ? (depsMap.get(c.department_id) ?? "Sem departamento")
+          : "Sem departamento",
+        assignedTo: c.assigned_user_id
+          ? (usersMap.get(c.assigned_user_id) ?? "Não atribuído")
+          : "Não atribuído",
         lastMessageAt: lastMessage.created_at,
         lastMessageText: lastMessage.text?.trim() || "Mensagem recebida",
         minutesWaiting: round2(minutesWaiting),
       };
     })
-    .filter((item): item is BacklogItem => Boolean(item))
+    .filter((x): x is BacklogItem => Boolean(x))
     .sort((a, b) => b.minutesWaiting - a.minutesWaiting);
 };
