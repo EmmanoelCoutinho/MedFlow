@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Conversation } from "../../types";
 import { Button } from "../ui/Button";
-import { TbMessageCheck } from "react-icons/tb";
+import { TbMessageCheck, TbMessageOff } from "react-icons/tb";
 import { HiOutlineSwitchHorizontal } from "react-icons/hi";
 import { FiSearch } from "react-icons/fi";
 import { CustomTooltip } from "../ui/CustomTooltip";
@@ -16,8 +16,10 @@ interface ChatHeaderProps {
   onTransfer?: () => void;
   onSearch?: () => void;
   onRefresh?: () => Promise<void> | void;
+  onClose?: () => Promise<void> | void;
   acceptDisabled?: boolean;
   transferDisabled?: boolean;
+  closeDisabled?: boolean;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -28,10 +30,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onTransfer,
   onSearch,
   onRefresh,
+  onClose,
   acceptDisabled = false,
   transferDisabled = false,
+  closeDisabled = false,
 }) => {
   const [isAccepting, setIsAccepting] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   const initials = useMemo(() => {
     const name = (conversation.contactName ?? "").trim();
@@ -59,7 +64,20 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     }
   };
 
+  const handleClose = async () => {
+    if (!onClose || closeDisabled || isClosing) return;
+
+    try {
+      setIsClosing(true);
+      await onClose();
+      await onRefresh?.();
+    } finally {
+      setIsClosing(false);
+    }
+  };
+
   const acceptIsDisabled = acceptDisabled || isAccepting;
+  const closeIsDisabled = closeDisabled || isClosing;
 
   return (
     <div className="sticky top-0 z-30 h-20 border-b border-[#E5E7EB] bg-white p-4">
@@ -113,6 +131,20 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           <CustomTooltip text="Buscar na conversa">
             <Button variant="ghost" size="sm" onClick={onSearch}>
               <FiSearch className="h-5 w-5" />
+            </Button>
+          </CustomTooltip>
+
+          <CustomTooltip
+            text={isClosing ? "Finalizando..." : "Finalizar conversa"}
+          >
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClose}
+              disabled={closeIsDisabled || !onClose}
+              aria-disabled={closeIsDisabled || !onClose}
+            >
+              <TbMessageOff className="h-5 w-5" />
             </Button>
           </CustomTooltip>
 

@@ -39,9 +39,7 @@ const writeLastOpenedAt = (map: Record<string, number>) => {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(LAST_OPENED_STORAGE_KEY, JSON.stringify(map));
-  } catch {
-    // ignore write errors (ex: storage disabled)
-  }
+  } catch {}
 };
 
 export const persistConversationOpenedAt = (
@@ -146,7 +144,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
   > => {
     if (!clinicId || !authUser) return [];
 
-    // 1) tenta multi-setor via department_members
     const { data, error } = await supabase
       .from("department_members")
       .select("department_id")
@@ -154,11 +151,9 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
     if (!error) {
       const ids = (data ?? []).map((r: any) => r.department_id).filter(Boolean);
-
       if (ids.length > 0) return ids;
     }
 
-    // 2) fallback: setor principal do membership (single)
     return membership?.department_id ? [membership.department_id] : [];
   }, [authUser, clinicId, membership?.department_id]);
 
@@ -220,50 +215,38 @@ export function useConversations(options: UseConversationsOptions = {}) {
         .neq("status", "closed")
         .order("last_message_at", { ascending: false });
 
-    // filtro opcional de canal
     const applyChannel = (q: any) =>
       options.channel ? q.eq("channel", options.channel) : q;
 
     try {
       let data: any[] = [];
 
-      // Se a tela passar status explicitamente, respeita.
       if (options.status) {
         let q = applyChannel(makeBase()).eq("status", options.status);
 
-        // regra: open sempre atribuída ao usuário logado
         if (options.status === "open") {
           q = q.eq("assigned_user_id", authUser.id);
         }
-
-        // (opcional) pending só não atribuídas:
-        // if (options.status === "pending") q = q.is("assigned_user_id", null);
 
         const res = await q;
         if (res.error) throw res.error;
         data = res.data ?? [];
       } else {
-        // padrão: retorna open atribuídas + pending dos setores acessíveis
         const [openRes, pendingRes] = await Promise.all([
           applyChannel(makeBase())
             .eq("status", "open")
             .eq("assigned_user_id", authUser.id),
-
           applyChannel(makeBase()).eq("status", "pending"),
-          // (opcional) só não atribuídas:
-          // .is("assigned_user_id", null),
         ]);
 
         if (openRes.error) throw openRes.error;
         if (pendingRes.error) throw pendingRes.error;
 
-        // merge sem duplicar
         const map = new Map<string, any>();
         (openRes.data ?? []).forEach((r: any) => map.set(r.id, r));
         (pendingRes.data ?? []).forEach((r: any) => map.set(r.id, r));
         data = Array.from(map.values());
 
-        // ordena por last_message_at desc
         data.sort(
           (a, b) =>
             new Date(b.last_message_at ?? 0).getTime() -
@@ -271,11 +254,8 @@ export function useConversations(options: UseConversationsOptions = {}) {
         );
       }
 
-      // ✅ daqui pra baixo pode manter seu mapping EXATAMENTE como está hoje
       const mapped: Conversation[] =
         data?.map((row: any) => {
-          // ... SEU MAPPING ATUAL (messages, preview, tags, unreadCount etc)
-          // (mantém tudo igual)
           const messages = (row.messages as any[]) ?? [];
 
           const last = messages
@@ -380,7 +360,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
     if (!authUser) return;
 
     const reloadTagForConversation = async (conversationId: string) => {
-      // busca as tags atuais da conversa (join)
       const { data, error } = await supabase
         .from("conversation_tags")
         .select("tags(id,name,color)")
@@ -439,7 +418,116 @@ export function useConversations(options: UseConversationsOptions = {}) {
     };
   }, [authUser, scheduleRefetch]);
 
-  // carregamento inicial + quando mudar filtro (status/canal)
+  useEffect(() => {
+    if (!authUser) return;
+    if (!clinicId) return;
+
+    let active = true;
+    let rtChannel: any = null;
+
+    (async () => {
+      const accessibleDepartmentIds = await getAccessibleDepartmentIds();
+      if (!active) return;
+
+      if (!accessibleDepartmentIds.length) {
+        console.log("[RT] conversations.update: no accessible departments");
+        return;
+      }
+
+      const filter = `clinic_id=eq.${clinicId}`;
+
+      rtChannel = supabase
+        .channel(`inbox-conversations-updates:${clinicId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "conversations",
+            filter,
+          },
+          (payload) => {
+            const nextRow = payload.new as any;
+            const prevRow = payload.old as any;
+
+            const conversationId = String(nextRow?.id ?? prevRow?.id ?? "");
+            if (!conversationId) return;
+
+            const nextDept = nextRow?.department_id
+              ? String(nextRow.department_id)
+              : null;
+
+            if (nextDept && !accessibleDepartmentIds.includes(nextDept)) {
+              return;
+            }
+
+            console.log("[RT] conversation update", {
+              id: conversationId,
+              prevStatus: prevRow?.status ?? null,
+              nextStatus: nextRow?.status ?? null,
+              prevAssigned: prevRow?.assigned_user_id ?? null,
+              nextAssigned: nextRow?.assigned_user_id ?? null,
+            });
+
+            setConversations((current) => {
+              const idx = current.findIndex((c) => c.id === conversationId);
+
+              if (String(nextRow?.status) === "closed") {
+                if (idx === -1) return current;
+                const clone = [...current];
+                clone.splice(idx, 1);
+                return clone;
+              }
+
+              if (idx === -1) {
+                scheduleRefetch();
+                return current;
+              }
+
+              const old = current[idx];
+
+              const updated: Conversation = {
+                ...old,
+                status: nextRow?.status ?? old.status,
+                assignedTo: nextRow?.assigned_user_id ?? undefined,
+                lastTimestamp:
+                  nextRow?.last_message_at ?? old.lastTimestamp ?? undefined,
+              };
+
+              const clone = [...current];
+              clone[idx] = updated;
+
+              clone.sort(
+                (a, b) =>
+                  new Date(b.lastTimestamp ?? 0).getTime() -
+                  new Date(a.lastTimestamp ?? 0).getTime(),
+              );
+
+              return clone;
+            });
+
+            if (
+              String(prevRow?.status ?? "") !== String(nextRow?.status ?? "") ||
+              String(prevRow?.assigned_user_id ?? "") !==
+                String(nextRow?.assigned_user_id ?? "")
+            ) {
+              scheduleRefetch();
+            }
+          },
+        )
+        .subscribe((status) => {
+          console.log("[RT] conversations UPDATE channel status:", status);
+        });
+    })();
+
+    return () => {
+      active = false;
+      if (rtChannel) {
+        supabase.removeChannel(rtChannel);
+      }
+    };
+  }, [authUser, clinicId, getAccessibleDepartmentIds, scheduleRefetch]);
+
   useEffect(() => {
     if (authLoading) {
       setLoading(true);
@@ -457,7 +545,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
     };
   }, []);
 
-  // realtime focado em messages (igual o useMessages, mas atualizando a lista)
   useEffect(() => {
     if (!authUser) {
       return;
@@ -471,9 +558,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
           event: "INSERT",
           schema: "public",
           table: "messages",
-          // se quiser deixar mais parecido ainda com o useMessages,
-          // voce poderia depois colocar um filter aqui, mas nao e obrigatorio:
-          // filter: '...',
         },
         (payload) => {
           const msg = payload.new as DbMessage;
@@ -484,7 +568,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
           setConversations((current) => {
             const idx = current.findIndex((c) => c.id === msg.conversation_id);
             if (idx === -1) {
-              // conversa nao esta na lista (pode nao ser "open" ou nao bater o filtro)
               scheduleRefetch();
               return current;
             }
@@ -512,7 +595,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
             const clone = [...current];
             clone[idx] = updated;
 
-            // reordenar pra conversa com mensagem nova subir
             clone.sort(
               (a, b) =>
                 new Date(b.lastTimestamp ?? 0).getTime() -

@@ -24,6 +24,10 @@ const getEventText = (event: ConversationEvent) => {
   switch (event.type) {
     case "conversation_accepted":
       return `${actor} aceitou a conversa`;
+    case "conversation_closed":
+      return `${actor} finalizou a conversa`;
+    case "conversation_reopened":
+      return `${actor} reabriu a conversa`;
     case "sector_transferred": {
       const toSector = meta.to_department_name ?? "outro setor";
       return `${actor} transferiu para ${toSector}`;

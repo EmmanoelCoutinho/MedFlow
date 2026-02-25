@@ -71,6 +71,7 @@ export const Chat: React.FC = () => {
   const [tagsLoading, setTagsLoading] = useState(false);
   const [tagsSavingId, setTagsSavingId] = useState<string | null>(null);
   const [acceptingConversation, setAcceptingConversation] = useState(false);
+  const [closingConversation, setClosingConversation] = useState(false);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferringConversation, setTransferringConversation] =
     useState(false);
@@ -482,6 +483,43 @@ export const Chat: React.FC = () => {
     setAcceptingConversation(false);
   }, [id, loadConversation]);
 
+  const handleCloseConversation = useCallback(async () => {
+    if (!id) return;
+
+    setClosingConversation(true);
+
+    const { data, error } = await supabase.functions.invoke(
+      "close-conversation",
+      {
+        body: { conversationId: id },
+      },
+    );
+
+    if (error) {
+      console.error("Erro ao finalizar conversa:", error);
+      setClosingConversation(false);
+      return;
+    }
+
+    const updated = (data as any)?.conversation;
+    if (updated) {
+      setConversation((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: updated.status,
+              assignedTo: updated.assigned_user_id ?? undefined,
+            }
+          : prev,
+      );
+    }
+
+    await loadConversation();
+    setClosingConversation(false);
+
+    navigate("/inbox");
+  }, [id, loadConversation, navigate]);
+
   const handleTransferConversation = useCallback(
     async (target: { departmentId: string }) => {
       if (!id) return;
@@ -586,7 +624,6 @@ export const Chat: React.FC = () => {
     return !!departmentId;
   }, [authUser, conversation, departmentId]);
 
-  // ✅ NOVO: cria o nonce obrigatório antes de enviar
   const createSendNonce = useCallback(async (conversationId: string) => {
     const { data, error } = await supabase.functions.invoke(
       "create-send-nonce",
@@ -669,7 +706,6 @@ export const Chat: React.FC = () => {
       return;
     }
 
-    // ✅ AQUI: gerar nonce e mandar junto
     let nonce: string;
     try {
       nonce = await createSendNonce(id);
@@ -681,7 +717,7 @@ export const Chat: React.FC = () => {
 
     const { data, error } = await supabase.functions.invoke(functionName, {
       body: {
-        nonce, // ✅ obrigatório agora
+        nonce,
         conversationId: id,
         text: bodyText,
         type: outboundType,
@@ -768,12 +804,16 @@ export const Chat: React.FC = () => {
         onBack={() => navigate("/inbox")}
         onManageTags={() => setIsManageTagsOpen(true)}
         onAccept={handleAcceptConversation}
+        onClose={handleCloseConversation}
         onRefresh={loadConversation}
         onTransfer={() => setIsTransferOpen(true)}
         acceptDisabled={
           acceptingConversation ||
           !authUser ||
           conversation.status !== "pending"
+        }
+        closeDisabled={
+          closingConversation || !authUser || conversation.status === "closed"
         }
       />
 
