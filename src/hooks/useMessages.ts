@@ -108,9 +108,12 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
     (payload as any)?.document?.file_size ??
     undefined;
 
+  const direction = row.direction as "inbound" | "outbound" | undefined;
+
   const mapped: UiMessage = {
     id: row.id,
     conversationId: row.conversation_id,
+    direction,
     author: row.direction === "inbound" ? "cliente" : "atendente",
     text: row.text ?? caption ?? "",
     type,
@@ -197,10 +200,7 @@ export function useMessages(conversationId: string | null) {
             const hasPendingOptimistic = current.some((m) =>
               String(m.id).startsWith("local-"),
             );
-            if (
-              hasPendingOptimistic &&
-              newMsg.author === "atendente"
-            ) {
+            if (hasPendingOptimistic && newMsg.author === "atendente") {
               return current;
             }
             const existingIdx = current.findIndex((m) => m.id === newMsg.id);

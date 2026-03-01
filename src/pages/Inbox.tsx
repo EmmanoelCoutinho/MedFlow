@@ -62,7 +62,7 @@ export const Inbox: React.FC = () => {
 
       const matchesTag =
         selectedTagIds.length === 0 ||
-        selectedTagIds.every((id) => conv.tags?.some((t) => t.id === id));
+        (conv.tags ?? []).some((t) => selectedTagIds.includes(t.id));
 
       return matchesSearch && matchesChannel && matchesTag;
     });

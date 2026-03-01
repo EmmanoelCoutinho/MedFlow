@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { toast } from "react-toastify";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useClinic } from "../contexts/ClinicContext";
@@ -49,6 +50,31 @@ function getMediaPreviewText(
     default:
       return "";
   }
+}
+
+const HOURS_24_MS = 24 * 60 * 60 * 1000;
+
+function getLastInboundClientAt(messages: Message[]) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.direction === "inbound") return m.createdAt;
+  }
+  return null;
+}
+
+function isInside24hWindow(lastInboundAtIso: string | null) {
+  if (!lastInboundAtIso) return false;
+  const last = new Date(lastInboundAtIso).getTime();
+  if (Number.isNaN(last)) return false;
+  return Date.now() - last <= HOURS_24_MS;
+}
+
+function get24hBlockMessage(channel: Channel) {
+  if (channel === "whatsapp") {
+    return "Não foi possível enviar: no WhatsApp, após 24h da última mensagem do cliente, só é permitido enviar mensagens por template aprovado.";
+  }
+
+  return "Não foi possível enviar: essa conversa está fora da janela de atendimento. Envie um template (quando aplicável) ou aguarde o cliente responder.";
 }
 
 export const Chat: React.FC = () => {
@@ -653,6 +679,16 @@ export const Chat: React.FC = () => {
       return;
     }
 
+    const lastInboundAt = getLastInboundClientAt(messages);
+    const canSend = isInside24hWindow(lastInboundAt);
+
+    if (!canSend) {
+      toast.info(get24hBlockMessage(conversation.channel), {
+        autoClose: 4500,
+      });
+      return;
+    }
+
     let bodyText = "";
     let outboundType: "text" | "image" | "audio" | "document" = "text";
     let mediaUrl: string | undefined;
@@ -950,7 +986,9 @@ export const Chat: React.FC = () => {
         currentDepartmentId={departmentId}
       />
 
-      <MessageInput onSend={handleSendMessage} disabled={!canReply} />
+      {conversation.status === "open" && (
+        <MessageInput onSend={handleSendMessage} disabled={!canReply} />
+      )}
     </div>
   );
 };

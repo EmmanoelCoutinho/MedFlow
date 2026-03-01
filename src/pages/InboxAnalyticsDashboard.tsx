@@ -657,8 +657,8 @@ export const InboxAnalyticsDashboard: React.FC = () => {
         {/* CAMADA 3: AÇÃO */}
         <section className="space-y-3">
           <SectionHeader
-            title="Ação"
-            subtitle="O que precisa de atenção agora: conversas aguardando resposta."
+            title="Clique em uma conversa para abrir o atendimento"
+            subtitle="Conversas que exigem atenção imediata e estão aguardando resposta"
           />
 
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

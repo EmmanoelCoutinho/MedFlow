@@ -9,8 +9,8 @@ import {
   MicIcon,
 } from "lucide-react";
 import { Button } from "../ui/Button";
-import { emojis } from "../../constants/emojis";
 import { supabase } from "../../lib/supabaseClient";
+import { EmojiPicker } from "./EmojiPicker";
 
 type SendableInput =
   | string
@@ -143,7 +143,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (disabled) return;
 
     setMessage((prev) => `${prev}${emoji}`);
-    setShowEmojis(false);
   };
 
   const AUDIO_CONVERTER_URL = import.meta.env.VITE_AUDIO_CONVERTER_URL;
@@ -611,23 +610,12 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           )}
         </Button>
 
-        {showEmojis && !disabled && (
-          <div
-            ref={pickerRef}
-            className="absolute bottom-full left-16 mb-2 w-72 max-h-[300px] overflow-y-auto overflow-x-hidden rounded-lg border border-[#E5E7EB] bg-white shadow-lg p-2 grid grid-cols-8 gap-2"
-          >
-            {emojis.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => handleEmojiClick(emoji)}
-                className="text-xl hover:bg-[#E5E7EB] rounded-lg p-1 leading-none"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        )}
+        <EmojiPicker
+          open={showEmojis && !disabled}
+          disabled={disabled}
+          pickerRef={pickerRef}
+          onPick={handleEmojiClick}
+        />
       </form>
 
       {/* Inputs "invisíveis" para arquivos */}

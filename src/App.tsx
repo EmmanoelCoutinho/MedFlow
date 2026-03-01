@@ -20,6 +20,8 @@ import { AuthCallback } from "./pages/Callback";
 import { SetPassword } from "./pages/SetPassword";
 import { MetaIntegrationsPage } from "./pages/IntegrationsMetaPage";
 import { MetaCallbackPage } from "./pages/IntegrationCallbackPage";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 type RequireAuthProps = {
   children: ReactNode;
@@ -107,6 +109,7 @@ export function App() {
     <BrowserRouter future={{ v7_relativeSplatPath: true }}>
       <AuthProvider>
         <ClinicProvider>
+          <ToastContainer position="top-right" autoClose={3000} />
           <RoutedApp />
         </ClinicProvider>
       </AuthProvider>
