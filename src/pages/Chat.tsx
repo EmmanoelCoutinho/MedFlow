@@ -36,6 +36,23 @@ type SendableInput =
       fileSize?: number;
     };
 
+type LocalSendStatus = "sending" | "failed" | "sent";
+
+type LocalPayload = {
+  type: "text" | "image" | "audio" | "document";
+  text?: string;
+  mediaUrl?: string;
+  mediaMimeType?: string;
+  filename?: string;
+  fileSize?: number;
+};
+
+type LocalMessageMeta = {
+  localStatus?: LocalSendStatus;
+  localError?: string | null;
+  localPayload?: LocalPayload;
+};
+
 function getMediaPreviewText(
   type: "text" | "image" | "audio" | "document",
   filename?: string,
@@ -77,12 +94,53 @@ function get24hBlockMessage(channel: Channel) {
   return "Não foi possível enviar: essa conversa está fora da janela de atendimento. Envie um template (quando aplicável) ou aguarde o cliente responder.";
 }
 
+function getSendFunctionName(channel: Channel) {
+  return channel === "whatsapp"
+    ? "send-whatsapp-message"
+    : channel === "messenger" || channel === "instagram"
+      ? "send-meta-message"
+      : null;
+}
+
+function normalizeInput(input: SendableInput) {
+  let bodyText = "";
+  let outboundType: "text" | "image" | "audio" | "document" = "text";
+  let mediaUrl: string | undefined;
+  let mediaMimeType: string | undefined;
+  let filename: string | undefined;
+  let fileSize: number | undefined;
+
+  if (typeof input === "string") {
+    bodyText = input.trim();
+    outboundType = "text";
+  } else {
+    outboundType = input.type;
+    bodyText = (input.text ?? "").trim();
+    mediaUrl = input.mediaUrl;
+    mediaMimeType = input.mediaMimeType;
+    filename = input.filename;
+    fileSize = input.fileSize;
+  }
+
+  return {
+    bodyText,
+    outboundType,
+    mediaUrl,
+    mediaMimeType,
+    filename,
+    fileSize,
+  };
+}
+
 export const Chat: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { authUser } = useAuth();
   const { clinicId, membership } = useClinic();
   const departmentId = membership?.department_id ?? null;
+
+  const didInitialConversationLoadRef = useRef(false);
+  const [refreshingConversation, setRefreshingConversation] = useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const justOpenedRef = useRef(true);
@@ -268,116 +326,134 @@ export const Chat: React.FC = () => {
     );
   }, []);
 
-  const loadConversation = useCallback(async () => {
-    if (!id) return;
-    if (!clinicId || !departmentId) {
-      setConversation(null);
-      setLoadingConversation(false);
-      return;
-    }
+  const loadConversation = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = !!opts?.silent;
 
-    setLoadingConversation(true);
+      if (!id) return;
+      if (!clinicId || !departmentId) {
+        setConversation(null);
+        setLoadingConversation(false);
+        didInitialConversationLoadRef.current = true;
+        return;
+      }
 
-    const { data, error } = await supabase
-      .from("conversations")
-      .select(
-        `
-      id,
-      status,
-      channel,
-      last_message_at,
-      created_at,
-      assigned_user_id,
-      contacts:contact_id (
+      const shouldHardLoad =
+        !silent && !didInitialConversationLoadRef.current && !conversation;
+
+      if (shouldHardLoad) setLoadingConversation(true);
+      else if (!silent) setRefreshingConversation(true);
+
+      const { data, error } = await supabase
+        .from("conversations")
+        .select(
+          `
         id,
-        name,
-        phone
-      ),
-      messages (
-        id,
-        text,
-        sent_at,
-        direction,
-        type
-      ),
-      clinic_id,
-      department_id,
-      conversation_tags (
-        tag_id,
-        tags (
+        status,
+        channel,
+        last_message_at,
+        created_at,
+        assigned_user_id,
+        contacts:contact_id (
           id,
           name,
-          color
+          phone
+        ),
+        messages (
+          id,
+          text,
+          sent_at,
+          direction,
+          type
+        ),
+        clinic_id,
+        department_id,
+        conversation_tags (
+          tag_id,
+          tags (
+            id,
+            name,
+            color
+          )
         )
-      )
-    `,
-      )
-      .eq("id", id)
-      .eq("clinic_id", clinicId)
-      .eq("department_id", departmentId)
-      .maybeSingle();
+      `,
+        )
+        .eq("id", id)
+        .eq("clinic_id", clinicId)
+        .eq("department_id", departmentId)
+        .maybeSingle();
 
-    if (error) {
-      console.error("Erro ao buscar conversa:", error);
+      if (error) {
+        console.error("Erro ao buscar conversa:", error);
+        setLoadingConversation(false);
+        setRefreshingConversation(false);
+        didInitialConversationLoadRef.current = true;
+        return;
+      }
+
+      if (!data) {
+        setConversation(null);
+        setLoadingConversation(false);
+        setRefreshingConversation(false);
+        didInitialConversationLoadRef.current = true;
+        return;
+      }
+
+      const messagesRows =
+        (data.messages as {
+          id: string;
+          text: string | null;
+          sent_at: string | null;
+          direction: string | null;
+          type?: string | null;
+        }[]) ?? [];
+
+      const last = messagesRows[messagesRows.length - 1];
+
+      const rawContacts: any = (data as any).contacts;
+      const contactRow = Array.isArray(rawContacts)
+        ? rawContacts[0]
+        : rawContacts;
+
+      const ct = ((data as any).conversation_tags as any[]) ?? [];
+      const tagsFromConv: UiTag[] = ct
+        .map((row) => row?.tags)
+        .flat()
+        .filter(Boolean)
+        .map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          color: t.color ?? "#0A84FF",
+        }));
+
+      const mappedConversation: Conversation = {
+        id: (data as any).id,
+        clinicId: (data as any).clinic_id ?? undefined,
+        channel: (data as any).channel as Channel,
+        status: ((data as any).status as Conversation["status"]) ?? "pending",
+        contactName:
+          contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
+        contactNumber: contactRow?.phone ?? "",
+        lastMessage: last?.text ?? "",
+        lastMessageType: (last as any)?.type ?? "text",
+        lastTimestamp:
+          last?.sent_at ??
+          (data as any).last_message_at ??
+          new Date().toISOString(),
+        unreadCount: 0,
+        tags: tagsFromConv,
+        assignedTo: (data as any).assigned_user_id ?? undefined,
+      };
+
+      setSelectedTags(tagsFromConv);
+      setConversation(mappedConversation);
+
       setLoadingConversation(false);
-      return;
-    }
-
-    if (!data) {
-      setConversation(null);
-      setLoadingConversation(false);
-      return;
-    }
-
-    const messagesRows =
-      (data.messages as {
-        id: string;
-        text: string | null;
-        sent_at: string | null;
-        direction: string | null;
-        type?: string | null;
-      }[]) ?? [];
-
-    const last = messagesRows[messagesRows.length - 1];
-
-    const rawContacts: any = (data as any).contacts;
-    const contactRow = Array.isArray(rawContacts)
-      ? rawContacts[0]
-      : rawContacts;
-
-    const ct = ((data as any).conversation_tags as any[]) ?? [];
-    const tagsFromConv: UiTag[] = ct
-      .map((row) => row?.tags)
-      .flat()
-      .filter(Boolean)
-      .map((t: any) => ({
-        id: t.id,
-        name: t.name,
-        color: t.color ?? "#0A84FF",
-      }));
-
-    const mappedConversation: Conversation = {
-      id: (data as any).id,
-      clinicId: (data as any).clinic_id ?? undefined,
-      channel: (data as any).channel as Channel,
-      status: ((data as any).status as Conversation["status"]) ?? "pending",
-      contactName: contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
-      contactNumber: contactRow?.phone ?? "",
-      lastMessage: last?.text ?? "",
-      lastMessageType: (last as any)?.type ?? "text",
-      lastTimestamp:
-        last?.sent_at ??
-        (data as any).last_message_at ??
-        new Date().toISOString(),
-      unreadCount: 0,
-      tags: tagsFromConv,
-      assignedTo: (data as any).assigned_user_id ?? undefined,
-    };
-
-    setSelectedTags(tagsFromConv);
-    setConversation(mappedConversation);
-    setLoadingConversation(false);
-  }, [id, clinicId, departmentId]);
+      setRefreshingConversation(false);
+      didInitialConversationLoadRef.current = true;
+    },
+    [id, clinicId, departmentId, conversation],
+  );
 
   useEffect(() => {
     handleScrollCheck();
@@ -440,7 +516,7 @@ export const Chat: React.FC = () => {
           filter: `id=eq.${id}`,
         },
         () => {
-          loadConversation();
+          loadConversation({ silent: true });
         },
       )
       .subscribe();
@@ -671,107 +747,119 @@ export const Chat: React.FC = () => {
     return nonce as string;
   }, []);
 
-  const handleSendMessage = async (input: SendableInput) => {
-    if (!id) return;
-    if (!conversation?.channel) return;
+  const markLocalMessage = useCallback(
+    (tempId: string, patch: Partial<LocalMessageMeta>) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId ? ({ ...m, ...(patch as any) } as any) : m,
+        ),
+      );
+    },
+    [setMessages],
+  );
 
-    if (!canReply) {
-      return;
-    }
+  const sendNow = useCallback(
+    async (opts: {
+      tempId: string;
+      input: SendableInput;
+      isRetry?: boolean;
+    }) => {
+      if (!id) return;
+      if (!conversation?.channel) return;
+      if (!canReply) return;
 
-    const lastInboundAt = getLastInboundClientAt(messages);
-    const canSend = isInside24hWindow(lastInboundAt);
+      const { tempId, input } = opts;
 
-    if (!canSend) {
-      toast.info(get24hBlockMessage(conversation.channel), {
-        autoClose: 4500,
-      });
-      return;
-    }
+      const lastInboundAt = getLastInboundClientAt(messages);
+      const canSend = isInside24hWindow(lastInboundAt);
 
-    let bodyText = "";
-    let outboundType: "text" | "image" | "audio" | "document" = "text";
-    let mediaUrl: string | undefined;
-    let mediaMimeType: string | undefined;
-    let filename: string | undefined;
-    let fileSize: number | undefined;
+      if (!canSend) {
+        // mantém a mensagem e marca como falha (não some)
+        markLocalMessage(tempId, {
+          localStatus: "failed",
+          localError: get24hBlockMessage(conversation.channel),
+        });
 
-    if (typeof input === "string") {
-      bodyText = input.trim();
-      outboundType = "text";
-    } else {
-      outboundType = input.type;
-      bodyText = (input.text ?? "").trim();
-      mediaUrl = input.mediaUrl;
-      mediaMimeType = input.mediaMimeType;
-      filename = input.filename;
-      fileSize = input.fileSize;
-    }
+        toast.info(get24hBlockMessage(conversation.channel), {
+          autoClose: 4500,
+        });
+        return;
+      }
 
-    if (!bodyText && !mediaUrl) return;
-
-    const tempId = `local-${Date.now()}`;
-
-    const optimistic: Message = {
-      id: tempId,
-      conversationId: id,
-      author: "atendente",
-      text: bodyText || getMediaPreviewText(outboundType, filename),
-      createdAt: new Date().toISOString(),
-      type: outboundType,
-      mediaUrl,
-      mediaMimeType,
-      filename,
-      fileSize,
-    };
-
-    setMessages((prev) => [...prev, optimistic]);
-    scrollToBottom("smooth");
-
-    const channel = conversation.channel;
-
-    const functionName =
-      channel === "whatsapp"
-        ? "send-whatsapp-message"
-        : channel === "messenger" || channel === "instagram"
-          ? "send-meta-message"
-          : null;
-
-    if (!functionName) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      return;
-    }
-
-    let nonce: string;
-    try {
-      nonce = await createSendNonce(id);
-    } catch (e) {
-      console.error("Falha ao gerar nonce:", e);
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      return;
-    }
-
-    const { data, error } = await supabase.functions.invoke(functionName, {
-      body: {
-        nonce,
-        conversationId: id,
-        text: bodyText,
-        type: outboundType,
+      const {
+        bodyText,
+        outboundType,
         mediaUrl,
         mediaMimeType,
         filename,
         fileSize,
-      },
-    });
+      } = normalizeInput(input);
 
-    if (error) {
-      console.error(`Erro ao enviar mensagem (${functionName}):`, error);
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      return;
-    }
+      if (!bodyText && !mediaUrl) {
+        markLocalMessage(tempId, {
+          localStatus: "failed",
+          localError: "Nada para enviar.",
+        });
+        return;
+      }
 
-    const inserted = (data as any)?.message;
-    if (inserted) {
+      const functionName = getSendFunctionName(conversation.channel);
+      if (!functionName) {
+        markLocalMessage(tempId, {
+          localStatus: "failed",
+          localError: "Canal não suportado para envio.",
+        });
+        return;
+      }
+
+      // marca como enviando
+      markLocalMessage(tempId, { localStatus: "sending", localError: null });
+
+      let nonce: string;
+      try {
+        nonce = await createSendNonce(id);
+      } catch (e: any) {
+        console.error("Falha ao gerar nonce:", e);
+        markLocalMessage(tempId, {
+          localStatus: "failed",
+          localError: "Falha ao preparar envio. Reenviar.",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: {
+          nonce,
+          conversationId: id,
+          text: bodyText,
+          type: outboundType,
+          mediaUrl,
+          mediaMimeType,
+          filename,
+          fileSize,
+        },
+      });
+
+      if (error) {
+        console.error(`Erro ao enviar mensagem (${functionName}):`, error);
+        markLocalMessage(tempId, {
+          localStatus: "failed",
+          localError: "Falha ao enviar. Reenviar.",
+        });
+        toast.error("Não foi possível enviar a mensagem.");
+        return;
+      }
+
+      const inserted = (data as any)?.message;
+      if (!inserted) {
+        markLocalMessage(tempId, {
+          localStatus: "failed",
+          localError: "Envio não retornou confirmação. Reenviar.",
+        });
+        return;
+      }
+
+      // documento: persist filename se necessário
       if (outboundType === "document" && filename && inserted.id) {
         const { error: filenameError } = await supabase
           .from("messages")
@@ -784,17 +872,23 @@ export const Chat: React.FC = () => {
       }
 
       const persisted: Message = mapDbMessage(inserted);
+
+      const optimistic = messages.find((m) => m.id === tempId) as
+        | (Message & LocalMessageMeta)
+        | undefined;
+
       const merged: Message = {
         ...persisted,
-        filename: persisted.filename ?? optimistic.filename,
-        fileSize: persisted.fileSize ?? optimistic.fileSize,
-        mediaUrl: persisted.mediaUrl ?? optimistic.mediaUrl,
-        mediaMimeType: persisted.mediaMimeType ?? optimistic.mediaMimeType,
+        filename: persisted.filename ?? optimistic?.filename,
+        fileSize: persisted.fileSize ?? optimistic?.fileSize,
+        mediaUrl: persisted.mediaUrl ?? optimistic?.mediaUrl,
+        mediaMimeType: persisted.mediaMimeType ?? optimistic?.mediaMimeType,
         text:
           persisted.text ||
-          getMediaPreviewText(outboundType, optimistic.filename),
+          getMediaPreviewText(outboundType, optimistic?.filename),
       };
 
+      // substitui o local pela persistida (sem “piscar”)
       setMessages((prev) => {
         const withoutTemp = prev.filter((m) => m.id !== tempId);
         const idx = withoutTemp.findIndex((m) => m.id === merged.id);
@@ -807,8 +901,82 @@ export const Chat: React.FC = () => {
       });
 
       scrollToBottom("smooth");
-    }
+    },
+    [
+      id,
+      conversation?.channel,
+      canReply,
+      messages,
+      createSendNonce,
+      markLocalMessage,
+      setMessages,
+      scrollToBottom,
+      conversation,
+    ],
+  );
+
+  const handleSendMessage = async (input: SendableInput) => {
+    if (!id) return;
+    if (!conversation?.channel) return;
+    if (!canReply) return;
+
+    const {
+      bodyText,
+      outboundType,
+      mediaUrl,
+      mediaMimeType,
+      filename,
+      fileSize,
+    } = normalizeInput(input);
+
+    if (!bodyText && !mediaUrl) return;
+
+    const tempId = `local-${Date.now()}`;
+
+    const optimistic: Message & LocalMessageMeta = {
+      id: tempId,
+      conversationId: id,
+      author: "atendente",
+      direction: "outbound",
+      text: bodyText || getMediaPreviewText(outboundType, filename),
+      createdAt: new Date().toISOString(),
+      type: outboundType,
+      mediaUrl,
+      mediaMimeType,
+      filename,
+      fileSize,
+
+      localStatus: "sending",
+      localError: null,
+      localPayload: {
+        type: outboundType,
+        text: bodyText,
+        mediaUrl,
+        mediaMimeType,
+        filename,
+        fileSize,
+      },
+    };
+
+    setMessages((prev) => [...prev, optimistic]);
+    scrollToBottom("smooth");
+
+    await sendNow({ tempId, input });
   };
+
+  const handleRetryLocalMessage = useCallback(
+    async (msg: Message) => {
+      const meta = msg as any as LocalMessageMeta;
+      if (!meta.localPayload) return;
+
+      await sendNow({
+        tempId: msg.id,
+        input: meta.localPayload,
+        isRetry: true,
+      });
+    },
+    [sendNow],
+  );
 
   if (loadingConversation) {
     return (
@@ -875,11 +1043,49 @@ export const Chat: React.FC = () => {
           <>
             {timelineItems.map((item) =>
               item.kind === "message" ? (
-                <MessageBubble
-                  key={`message-${item.message.id}`}
-                  message={item.message}
-                  contactName={conversation.contactName}
-                />
+                <div key={`message-${item.message.id}`} className="space-y-1">
+                  <MessageBubble
+                    message={item.message}
+                    contactName={conversation.contactName}
+                    onRetry={handleRetryLocalMessage}
+                  />
+
+                  {/* ✅ UI de falha/reenvio SEM mexer no MessageBubble */}
+                  {(() => {
+                    const m = item.message as any as Message & LocalMessageMeta;
+                    const isFailed =
+                      m.author === "atendente" && m.localStatus === "failed";
+                    const isSending =
+                      m.author === "atendente" && m.localStatus === "sending";
+
+                    if (!isFailed && !isSending) return null;
+
+                    return (
+                      <div className="flex items-center justify-end gap-2">
+                        {isSending && (
+                          <span className="text-xs text-gray-400">
+                            Enviando...
+                          </span>
+                        )}
+
+                        {isFailed && (
+                          <>
+                            <span className="text-xs text-red-600">
+                              Não enviada
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRetryLocalMessage(m)}
+                              className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                            >
+                              Reenviar
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               ) : (
                 <SystemEventBubble
                   key={`event-${item.event.id}`}

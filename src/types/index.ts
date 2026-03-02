@@ -10,6 +10,8 @@ export type Tag = {
 
 export type MessageDirection = "inbound" | "outbound";
 
+export type MessageSendStatus = "sending" | "failed" | "sent";
+
 export type Conversation = {
   id: string;
   clinicId?: string;
@@ -47,6 +49,17 @@ export type Message = {
   payload?: any;
   caption?: string;
   createdAt: string;
+
+  localStatus?: MessageSendStatus;
+  localError?: string | null;
+  localPayload?: {
+    type: "text" | "image" | "audio" | "document";
+    text?: string;
+    mediaUrl?: string;
+    mediaMimeType?: string;
+    filename?: string;
+    fileSize?: number;
+  };
 };
 
 export type ConversationEvent = {

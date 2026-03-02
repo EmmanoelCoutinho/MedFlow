@@ -1,34 +1,46 @@
-import React, { useState } from 'react';
-import { DownloadIcon, FileIcon } from 'lucide-react';
-import type { Message as UiMessage } from '../../types';
+import React, { useMemo, useState } from "react";
+import { DownloadIcon, FileIcon } from "lucide-react";
+import type { Message as UiMessage } from "../../types";
 
 interface MessageBubbleProps {
   message: UiMessage;
   contactAvatar?: string;
   contactName?: string;
+
+  /**
+   * Opcional: usado para permitir "Reenviar" quando a mensagem é local e falhou.
+   * Você deve passar essa função a partir do Chat.tsx.
+   */
+  onRetry?: (message: UiMessage) => void;
 }
 
+type LocalSendStatus = "sending" | "failed" | "sent";
+type LocalMeta = {
+  localStatus?: LocalSendStatus;
+  localError?: string | null;
+};
+
 const getInitials = (name?: string) =>
-  (name ?? 'Cliente')
-    .split(' ')
+  (name ?? "Cliente")
+    .split(" ")
     .filter(Boolean)
     .map((n) => n[0])
-    .join('')
+    .join("")
     .toUpperCase()
     .slice(0, 2);
 
 const formatTime = (timestamp: string) => {
   const date = new Date(timestamp);
-  return date.toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
+  return date.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
   });
 };
 
 const formatBytes = (bytes?: number) => {
   if (!bytes || Number.isNaN(bytes)) return null;
 
-  const units = ['B', 'KB', 'MB', 'GB'];
+  const units = ["B", "KB", "MB", "GB"];
   let size = bytes;
   let unitIndex = 0;
 
@@ -46,38 +58,38 @@ const formatBytes = (bytes?: number) => {
 };
 
 const getDocumentLabel = (filename?: string, mimeType?: string) => {
-  const ext = filename?.split('.').pop();
+  const ext = filename?.split(".").pop();
   if (ext && ext.length <= 6) return ext.toUpperCase();
 
-  if (!mimeType) return 'DOC';
-  if (mimeType === 'application/pdf') return 'PDF';
-  if (mimeType.includes('word')) return 'DOC';
-  if (mimeType.includes('excel') || mimeType.includes('spreadsheet'))
-    return 'XLS';
-  if (mimeType.includes('powerpoint') || mimeType.includes('presentation'))
-    return 'PPT';
-  if (mimeType.startsWith('text/')) return 'TXT';
+  if (!mimeType) return "DOC";
+  if (mimeType === "application/pdf") return "PDF";
+  if (mimeType.includes("word")) return "DOC";
+  if (mimeType.includes("excel") || mimeType.includes("spreadsheet"))
+    return "XLS";
+  if (mimeType.includes("powerpoint") || mimeType.includes("presentation"))
+    return "PPT";
+  if (mimeType.startsWith("text/")) return "TXT";
 
-  return 'DOC';
+  return "DOC";
 };
 
 const getDocumentAccentClass = (label: string) => {
   switch (label) {
-    case 'PDF':
-      return 'bg-red-500';
-    case 'DOC':
-    case 'DOCX':
-      return 'bg-blue-500';
-    case 'XLS':
-    case 'XLSX':
-      return 'bg-emerald-500';
-    case 'PPT':
-    case 'PPTX':
-      return 'bg-amber-500';
-    case 'TXT':
-      return 'bg-gray-600';
+    case "PDF":
+      return "bg-red-500";
+    case "DOC":
+    case "DOCX":
+      return "bg-blue-500";
+    case "XLS":
+    case "XLSX":
+      return "bg-emerald-500";
+    case "PPT":
+    case "PPTX":
+      return "bg-amber-500";
+    case "TXT":
+      return "bg-gray-600";
     default:
-      return 'bg-gray-500';
+      return "bg-gray-500";
   }
 };
 
@@ -93,11 +105,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   contactAvatar,
   contactName,
+  onRetry,
 }) => {
   const payload = message.payload ?? {};
-  const isClient = message.author === 'cliente';
+  const isClient = message.author === "cliente";
   const initials = getInitials(contactName);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+
+  // UI-only metadata (falha/envio)
+  const local = (message as unknown as LocalMeta) ?? {};
+  const localStatus = local.localStatus;
+  const localError = local.localError;
 
   const mediaUrl =
     message.mediaUrl ??
@@ -111,21 +129,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const mediaType =
     message.type ??
     (payload.image
-      ? 'image'
+      ? "image"
       : payload.audio
-      ? 'audio'
-      : payload.sticker
-      ? 'sticker'
-      : payload.video
-      ? 'video'
-      : payload.document
-      ? 'document'
-      : 'text');
+        ? "audio"
+        : payload.sticker
+          ? "sticker"
+          : payload.video
+            ? "video"
+            : payload.document
+              ? "document"
+              : "text");
 
   const captionFromPayload =
     payload?.image?.caption ?? payload?.document?.caption ?? null;
 
-  const displayText = message.text || captionFromPayload || '';
+  const displayText = message.text || captionFromPayload || "";
 
   const documentData =
     payload?.document ??
@@ -139,7 +157,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     message.filename ??
     documentData?.filename ??
     documentData?.name ??
-    (mediaType === 'document' ? parseFilenameFromDocumentText(message.text) : undefined);
+    (mediaType === "document"
+      ? parseFilenameFromDocumentText(message.text)
+      : undefined);
 
   const documentFileSize =
     message.fileSize ??
@@ -149,34 +169,87 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const documentLabel = getDocumentLabel(
     documentFilename,
-    message.mediaMimeType
+    message.mediaMimeType,
   );
   const documentSize = formatBytes(documentFileSize);
   const documentMeta = documentSize
     ? `${documentLabel} - ${documentSize}`
     : documentLabel;
   const documentAccentClass = getDocumentAccentClass(documentLabel);
-  const hasMedia = Boolean(mediaUrl);
-  const onlyAudio =
-    mediaType === 'audio' && (!displayText || !displayText.trim());
-  const onlyDocument =
-    mediaType === 'document' && (!displayText || !displayText.trim());
 
-  const bubbleBase = 'space-y-2';
-  const bubblePadding = hasMedia ? 'p-2' : 'px-4 py-3';
-  const bubbleClass = onlyAudio || onlyDocument
-    ? bubbleBase
-    : `${bubbleBase} ${
-        isClient
-          ? `rounded-lg ${bubblePadding} bg-[#E5E7EB] text-[#1E1E1E]`
-          : `rounded-lg ${bubblePadding} bg-[#0A84FF] text-white`
-      }`;
+  const hasMedia = Boolean(mediaUrl);
+
+  const onlyAudio =
+    mediaType === "audio" && (!displayText || !displayText.trim());
+  const onlyDocument =
+    mediaType === "document" && (!displayText || !displayText.trim());
+
+  const bubbleBase = "space-y-2";
+  const bubblePadding = hasMedia ? "p-2" : "px-4 py-3";
+
+  const bubbleClass =
+    onlyAudio || onlyDocument
+      ? bubbleBase
+      : `${bubbleBase} ${
+          isClient
+            ? `rounded-lg ${bubblePadding} bg-[#E5E7EB] text-[#1E1E1E]`
+            : `rounded-lg ${bubblePadding} bg-[#0A84FF] text-white`
+        }`;
+
+  const showStatusRow =
+    !isClient && (localStatus === "sending" || localStatus === "failed");
+
+  const statusNode = useMemo(() => {
+    if (!showStatusRow) return null;
+
+    if (localStatus === "sending") {
+      return (
+        <div className="flex items-center justify-end gap-2 mt-1">
+          <span className="text-xs text-gray-400">Enviando...</span>
+        </div>
+      );
+    }
+
+    if (localStatus === "failed") {
+      return (
+        <div className="flex items-center justify-end gap-2 mt-1">
+          <span className="text-xs text-red-600">Não enviada</span>
+
+          {typeof onRetry === "function" && (
+            <button
+              type="button"
+              onClick={() => onRetry(message)}
+              className="text-xs font-medium text-blue-600 hover:text-blue-700"
+            >
+              Reenviar
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  }, [showStatusRow, localStatus, onRetry, message]);
+
+  const errorHintNode = useMemo(() => {
+    if (!showStatusRow) return null;
+    if (localStatus !== "failed") return null;
+    if (!localError) return null;
+
+    return (
+      <div className="flex items-center justify-end mt-1">
+        <span className="text-[11px] text-gray-400 max-w-[320px] text-right">
+          {localError}
+        </span>
+      </div>
+    );
+  }, [showStatusRow, localStatus, localError]);
 
   return (
-    <div className={`flex ${isClient ? 'justify-start' : 'justify-end'}`}>
+    <div className={`flex ${isClient ? "justify-start" : "justify-end"}`}>
       <div
         className={`flex items-end gap-2 max-w-md ${
-          isClient ? '' : 'flex-row-reverse'
+          isClient ? "" : "flex-row-reverse"
         }`}
       >
         {isClient && (
@@ -184,7 +257,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             {contactAvatar ? (
               <img
                 src={contactAvatar}
-                alt={`Foto de ${contactName ?? 'Cliente'}`}
+                alt={`Foto de ${contactName ?? "Cliente"}`}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -197,7 +270,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           <div className={bubbleClass}>
             {mediaUrl && (
               <>
-                {mediaType === 'image' && (
+                {mediaType === "image" && (
                   <img
                     src={mediaUrl}
                     alt="Imagem"
@@ -206,11 +279,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   />
                 )}
 
-                {mediaType === 'audio' && (
+                {mediaType === "audio" && (
                   <div
                     className={`
                       flex items-center gap-3 rounded-2xl px-3 py-2
-                      ${isClient ? 'bg-[#E5E7EB]' : 'bg-[#0A84FF]'}
+                      ${isClient ? "bg-[#E5E7EB]" : "bg-[#0A84FF]"}
                       text-[#1E1E1E]
                     `}
                   >
@@ -224,7 +297,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   </div>
                 )}
 
-                {mediaType === 'video' && (
+                {mediaType === "video" && (
                   <video
                     controls
                     className="h-48 w-48 rounded-lg object-cover"
@@ -232,7 +305,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   />
                 )}
 
-                {mediaType === 'document' && (
+                {mediaType === "document" && (
                   <a
                     href={mediaUrl}
                     target="_blank"
@@ -246,7 +319,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-[#111827] truncate">
-                        {documentFilename || 'Documento'}
+                        {documentFilename || "Documento"}
                       </p>
                       <p className="text-xs text-[#6B7280]">{documentMeta}</p>
                     </div>
@@ -256,7 +329,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   </a>
                 )}
 
-                {mediaType === 'sticker' && (
+                {mediaType === "sticker" && (
                   <img
                     src={mediaUrl}
                     alt="Figurinha"
@@ -271,9 +344,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             ) : null}
           </div>
 
+          {/* ✅ status (enviando / falhou / reenviar) */}
+          {statusNode}
+          {errorHintNode}
+
           <span
             className={`text-xs text-gray-500 mt-1 ${
-              isClient ? 'text-left' : 'text-right'
+              isClient ? "text-left" : "text-right"
             }`}
           >
             {formatTime(message.createdAt)}
@@ -294,7 +371,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           role="button"
           tabIndex={0}
           onKeyDown={(event) => {
-            if (event.key === 'Escape') setPreviewSrc(null);
+            if (event.key === "Escape") setPreviewSrc(null);
           }}
         >
           <img

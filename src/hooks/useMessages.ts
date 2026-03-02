@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Message as UiMessage } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
@@ -67,13 +67,10 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
 
   const type = row?.type ?? mediaInfo.type ?? (payload as any)?.type;
 
-  // Estrutura da Meta (messages[0])
   const waMessage = Array.isArray(payload?.messages)
     ? payload.messages[0]
     : undefined;
 
-  // PRIORIDADE: URL do Storage (image_url / media_url).
-  // Só se não tiver, usa a url bruta da Meta (lookaside).
   const mediaUrl =
     row.image_url ??
     row.media_url ??
@@ -95,7 +92,7 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
     null;
 
   const filename =
-    row.filename ?? // ✅ PRIORIDADE: vem do seu DB (principal p/ outbound)
+    row.filename ??
     waMessage?.document?.filename ??
     (mediaInfo.data as any)?.filename ??
     (mediaInfo.data as any)?.name ??
@@ -110,7 +107,7 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
 
   const direction = row.direction as "inbound" | "outbound" | undefined;
 
-  const mapped: UiMessage = {
+  return {
     id: row.id,
     conversationId: row.conversation_id,
     direction,
@@ -124,62 +121,209 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
     payload,
     createdAt: row.sent_at ?? row.created_at ?? new Date().toISOString(),
   };
-
-  return mapped;
 };
+
+const messagesCache = new Map<string, UiMessage[]>();
+
+function isLocalOptimisticId(id: any) {
+  return typeof id === "string" && id.startsWith("local-");
+}
+
+/**
+ * Merge que preserva mensagens otimistas locais (local-*) quando o hook refaz fetch.
+ * Assim o refetch/realtime de conversations não "apaga" o optimistic.
+ */
+function mergeDbWithLocalOptimistics(prev: UiMessage[], db: UiMessage[]) {
+  const locals = prev.filter((m) => isLocalOptimisticId(m.id));
+  if (!locals.length) {
+    // garante ordenação
+    return [...db].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+  }
+
+  const merged: UiMessage[] = [...db];
+
+  // Heurística segura: manter local se ainda não existe "equivalente" no DB.
+  // (melhor ainda quando você adicionar nonce depois)
+  for (const lm of locals) {
+    const lmAt = new Date(lm.createdAt).getTime();
+    const exists = merged.some((m) => {
+      // só tenta equivalência para outbound do atendente
+      if (m.author !== "atendente") return false;
+
+      const mAt = new Date(m.createdAt).getTime();
+
+      // janela de 60s (evita duplicar quando DB já tem a mesma msg)
+      const closeInTime =
+        Number.isFinite(lmAt) &&
+        Number.isFinite(mAt) &&
+        Math.abs(mAt - lmAt) <= 60_000;
+
+      const sameType = (m.type ?? "text") === (lm.type ?? "text");
+      const sameText = (m.text ?? "") === (lm.text ?? "");
+
+      return closeInTime && sameType && sameText;
+    });
+
+    if (!exists) merged.push(lm);
+  }
+
+  merged.sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+
+  return merged;
+}
+
+/**
+ * Quando chega INSERT de uma mensagem do atendente e existe optimistic local-*,
+ * substitui a última optimistic compatível (mesmo type) para evitar:
+ * - duplicar
+ * - "sumir e voltar"
+ */
+function replaceLastLocalOptimisticWithPersisted(
+  current: UiMessage[],
+  persisted: UiMessage,
+) {
+  if (persisted.author !== "atendente") return null;
+
+  // Procura a última optimistic local-* compatível pelo type
+  for (let i = current.length - 1; i >= 0; i--) {
+    const m = current[i];
+    if (!isLocalOptimisticId(m.id)) continue;
+
+    const sameType = (m.type ?? "text") === (persisted.type ?? "text");
+    if (!sameType) continue;
+
+    const next = current.map((x, idx) => (idx === i ? persisted : x));
+    return next;
+  }
+
+  return null;
+}
 
 export function useMessages(conversationId: string | null) {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<any>(null);
 
-  const fetchMessages = useCallback(async () => {
+  const didInitialLoadRef = useRef(false);
+  const activeConversationIdRef = useRef<string | null>(conversationId);
+
+  useEffect(() => {
+    activeConversationIdRef.current = conversationId;
+
     if (!conversationId) {
       setMessages([]);
       setLoading(false);
+      setRefreshing(false);
+      setError(null);
+      didInitialLoadRef.current = true;
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
-    const { data, error } = await supabase
-      .from("messages")
-      .select(
-        `
-          id,
-          conversation_id,
-          direction,
-          text,
-          sent_at,
-          created_at,
-          sender,
-          type,
-          payload,
-          image_url,
-          media_url,
-          media_mime_type,
-          filename
-        `,
-      )
-      .eq("conversation_id", conversationId)
-      .order("sent_at", { ascending: true });
-
-    if (error) {
-      setError(error);
+    const cached = messagesCache.get(conversationId);
+    if (cached && cached.length) {
+      setMessages(cached);
       setLoading(false);
-      return;
+    } else {
+      setMessages([]);
+      setLoading(true);
     }
 
-    const mapped = (data ?? []).map((row) => mapDbMessage(row as DbMessage));
-
-    setMessages(mapped);
-    setLoading(false);
+    setError(null);
+    didInitialLoadRef.current = false;
   }, [conversationId]);
 
+  const fetchMessages = useCallback(
+    async (opts?: { reason?: "initial" | "refetch" }) => {
+      if (!conversationId) {
+        setMessages([]);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      const reason =
+        opts?.reason ?? (didInitialLoadRef.current ? "refetch" : "initial");
+
+      const hasCacheData = messagesCache.get(conversationId)?.length
+        ? true
+        : false;
+
+      const hasUiData = messages.length > 0;
+
+      const shouldHardLoad =
+        reason === "initial" &&
+        !hasCacheData &&
+        !hasUiData &&
+        !didInitialLoadRef.current;
+
+      if (shouldHardLoad) setLoading(true);
+      else setRefreshing(true);
+
+      setError(null);
+
+      const { data, error } = await supabase
+        .from("messages")
+        .select(
+          `
+            id,
+            conversation_id,
+            direction,
+            text,
+            sent_at,
+            created_at,
+            sender,
+            type,
+            payload,
+            image_url,
+            media_url,
+            media_mime_type,
+            filename
+          `,
+        )
+        .eq("conversation_id", conversationId)
+        .order("sent_at", { ascending: true });
+
+      if (error) {
+        setError(error);
+        setLoading(false);
+        setRefreshing(false);
+        didInitialLoadRef.current = true;
+        return;
+      }
+
+      const mapped = (data ?? []).map((row) => mapDbMessage(row as DbMessage));
+
+      // ✅ IMPORTANTE: não sobrescrever state com mapped (isso apaga local-*)
+      setMessages((prev) => {
+        const next = mergeDbWithLocalOptimistics(prev, mapped);
+        messagesCache.set(conversationId, next);
+        return next;
+      });
+
+      setLoading(false);
+      setRefreshing(false);
+      didInitialLoadRef.current = true;
+    },
+    [conversationId, messages.length],
+  );
+
   useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+    if (!conversationId) return;
+
+    const cached = messagesCache.get(conversationId);
+    if (cached && cached.length) {
+      fetchMessages({ reason: "refetch" });
+      return;
+    }
+
+    fetchMessages({ reason: "initial" });
+  }, [conversationId, fetchMessages]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -196,27 +340,48 @@ export function useMessages(conversationId: string | null) {
         },
         (payload) => {
           const newMsg = mapDbMessage(payload.new as DbMessage);
+
           setMessages((current) => {
-            const hasPendingOptimistic = current.some((m) =>
-              String(m.id).startsWith("local-"),
-            );
-            if (hasPendingOptimistic && newMsg.author === "atendente") {
-              return current;
-            }
+            // 1) Se já existe exatamente pelo ID, só mescla
             const existingIdx = current.findIndex((m) => m.id === newMsg.id);
-            if (existingIdx < 0) return [...current, newMsg];
-            const existing = current[existingIdx];
-            const merged: UiMessage = {
-              ...newMsg,
-              filename: newMsg.filename ?? existing.filename,
-              fileSize: newMsg.fileSize ?? existing.fileSize,
-              text:
-                newMsg.text ||
-                (existing.type === "document" && existing.filename
-                  ? existing.filename
-                  : existing.text),
-            };
-            return current.map((m, i) => (i === existingIdx ? merged : m));
+            if (existingIdx >= 0) {
+              const existing = current[existingIdx];
+              const merged: UiMessage = {
+                ...newMsg,
+                filename: newMsg.filename ?? existing.filename,
+                fileSize: newMsg.fileSize ?? existing.fileSize,
+                text:
+                  newMsg.text ||
+                  (existing.type === "document" && existing.filename
+                    ? existing.filename
+                    : existing.text),
+              };
+              const next = current.map((m, i) =>
+                i === existingIdx ? merged : m,
+              );
+              messagesCache.set(conversationId, next);
+              return next;
+            }
+
+            // 2) Se veio do atendente e existe local-*, substitui a última optimistic compatível
+            const replaced = replaceLastLocalOptimisticWithPersisted(
+              current,
+              newMsg,
+            );
+            if (replaced) {
+              messagesCache.set(conversationId, replaced);
+              return replaced;
+            }
+
+            // 3) Caso geral: adiciona no final
+            const next = [...current, newMsg].sort(
+              (a, b) =>
+                new Date(a.createdAt).getTime() -
+                new Date(b.createdAt).getTime(),
+            );
+
+            messagesCache.set(conversationId, next);
+            return next;
           });
         },
       )
@@ -227,5 +392,24 @@ export function useMessages(conversationId: string | null) {
     };
   }, [conversationId]);
 
-  return { messages, loading, error, refetch: fetchMessages, setMessages };
+  const setMessagesSafe = useCallback(
+    (updater: UiMessage[] | ((prev: UiMessage[]) => UiMessage[])) => {
+      setMessages((prev) => {
+        const next =
+          typeof updater === "function" ? (updater as any)(prev) : updater;
+        if (conversationId) messagesCache.set(conversationId, next);
+        return next;
+      });
+    },
+    [conversationId],
+  );
+
+  return {
+    messages,
+    loading,
+    refreshing,
+    error,
+    refetch: () => fetchMessages({ reason: "refetch" }),
+    setMessages: setMessagesSafe,
+  };
 }
