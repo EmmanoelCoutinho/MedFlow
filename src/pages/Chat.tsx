@@ -13,13 +13,12 @@ import { useClinic } from "../contexts/ClinicContext";
 import type { Conversation, Message, Channel } from "../types";
 import { useMessages, mapDbMessage } from "../hooks/useMessages";
 import { useConversationEvents } from "../hooks/useConversationEvents";
-import { persistConversationOpenedAt } from "../hooks/useConversations";
 import { Button } from "../components/ui/Button";
 import { ChatHeader } from "../components/chat/ChatHeader";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { SystemEventBubble } from "../components/chat/SystemEventBubble";
 import { MessageInput } from "../components/chat/MessageInput";
-import { ArrowDownIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowLeftIcon } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { TransferModal } from "../components/chat/TransferModal";
 
@@ -53,23 +52,8 @@ type LocalMessageMeta = {
   localPayload?: LocalPayload;
 };
 
-function getMediaPreviewText(
-  type: "text" | "image" | "audio" | "document",
-  filename?: string,
-): string {
-  switch (type) {
-    case "image":
-      return "Imagem";
-    case "audio":
-      return "Áudio";
-    case "document":
-      return filename ?? "Documento";
-    default:
-      return "";
-  }
-}
-
 const HOURS_24_MS = 24 * 60 * 60 * 1000;
+const RETRY_AUDIO_TRANSCRIPT_FUNCTION = "retry-audio-transcript";
 
 function getLastInboundClientAt(messages: Message[]) {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -140,6 +124,8 @@ export const Chat: React.FC = () => {
   const departmentId = membership?.department_id ?? null;
 
   const didInitialConversationLoadRef = useRef(false);
+  const activeRouteConversationIdRef = useRef<string | undefined>(id);
+  const conversationLoadRequestRef = useRef(0);
   const [refreshingConversation, setRefreshingConversation] = useState(false);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -190,8 +176,15 @@ export const Chat: React.FC = () => {
   const loadingTimeline = loadingMessages || loadingEvents;
 
   useEffect(() => {
+    activeRouteConversationIdRef.current = id;
     setShowScrollToBottom(false);
     justOpenedRef.current = true;
+    didInitialConversationLoadRef.current = false;
+    setConversation(null);
+    setSelectedTags([]);
+    setAvailableTags([]);
+    setLoadingConversation(true);
+    setRefreshingConversation(false);
   }, [id]);
 
   const getContainerMetrics = () => {
@@ -308,6 +301,7 @@ export const Chat: React.FC = () => {
       .eq("conversation_id", conversationId);
 
     if (error) return;
+    if (activeRouteConversationIdRef.current !== conversationId) return;
 
     const mapped: UiTag[] = ((data as any[]) ?? [])
       .map((r) => (r as any).tags)
@@ -329,12 +323,19 @@ export const Chat: React.FC = () => {
   const loadConversation = useCallback(
     async (opts?: { silent?: boolean }) => {
       const silent = !!opts?.silent;
+      const requestedId = id;
+      const requestId = ++conversationLoadRequestRef.current;
 
-      if (!id) return;
+      if (!requestedId) return;
       if (!clinicId || !departmentId) {
+        if (
+          requestId !== conversationLoadRequestRef.current ||
+          activeRouteConversationIdRef.current !== requestedId
+        ) {
+          return;
+        }
         setConversation(null);
-        setLoadingConversation(false);
-        didInitialConversationLoadRef.current = true;
+        setLoadingConversation(true);
         return;
       }
 
@@ -378,10 +379,17 @@ export const Chat: React.FC = () => {
         )
       `,
         )
-        .eq("id", id)
+        .eq("id", requestedId)
         .eq("clinic_id", clinicId)
         .eq("department_id", departmentId)
         .maybeSingle();
+
+      if (
+        requestId !== conversationLoadRequestRef.current ||
+        activeRouteConversationIdRef.current !== requestedId
+      ) {
+        return;
+      }
 
       if (error) {
         console.error("Erro ao buscar conversa:", error);
@@ -452,7 +460,7 @@ export const Chat: React.FC = () => {
       setRefreshingConversation(false);
       didInitialConversationLoadRef.current = true;
     },
-    [id, clinicId, departmentId, conversation],
+    [id, clinicId, departmentId],
   );
 
   useEffect(() => {
@@ -500,7 +508,7 @@ export const Chat: React.FC = () => {
     };
 
     fetchClinicTags();
-  }, [conversation]);
+  }, [conversation?.clinicId]);
 
   useEffect(() => {
     if (!id) return;
@@ -705,17 +713,6 @@ export const Chat: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!id || loadingMessages || messages.length === 0) return;
-
-    const lastMessage = messages[messages.length - 1];
-    const ts = lastMessage?.createdAt
-      ? new Date(lastMessage.createdAt).getTime()
-      : Date.now();
-
-    persistConversationOpenedAt(id, ts || Date.now());
-  }, [id, messages, loadingMessages]);
-
   const canReply = useMemo(() => {
     if (!authUser || !conversation) return false;
 
@@ -883,9 +880,7 @@ export const Chat: React.FC = () => {
         fileSize: persisted.fileSize ?? optimistic?.fileSize,
         mediaUrl: persisted.mediaUrl ?? optimistic?.mediaUrl,
         mediaMimeType: persisted.mediaMimeType ?? optimistic?.mediaMimeType,
-        text:
-          persisted.text ||
-          getMediaPreviewText(outboundType, optimistic?.filename),
+        text: persisted.text,
       };
 
       // substitui o local pela persistida (sem “piscar”)
@@ -938,7 +933,7 @@ export const Chat: React.FC = () => {
       conversationId: id,
       author: "atendente",
       direction: "outbound",
-      text: bodyText || getMediaPreviewText(outboundType, filename),
+      text: bodyText,
       createdAt: new Date().toISOString(),
       type: outboundType,
       mediaUrl,
@@ -978,15 +973,50 @@ export const Chat: React.FC = () => {
     [sendNow],
   );
 
-  if (loadingConversation) {
-    return (
-      <div className="flex items-center justify-center h-full w-full bg-white">
-        <p className="text-gray-500">Carregando conversa...</p>
-      </div>
-    );
+  const handleRetryAudioTranscript = useCallback(
+    async (message: Message) => {
+      if (!id) return;
+
+      const { error } = await supabase.functions.invoke(
+        RETRY_AUDIO_TRANSCRIPT_FUNCTION,
+        {
+          body: {
+            conversationId: id,
+            messageId: message.id,
+          },
+        },
+      );
+
+      if (error) {
+        console.error("Erro ao reprocessar transcricao:", error);
+        toast.error("Nao foi possivel reprocessar a transcricao.");
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === message.id
+            ? {
+                ...m,
+                transcriptStatus: "PENDING",
+              }
+            : m,
+        ),
+      );
+
+      toast.info("Transcricao solicitada novamente.");
+    },
+    [id, setMessages],
+  );
+
+  if (!id) {
+    return null;
   }
 
-  if (!conversation) {
+  const showConversationNotFound =
+    !loadingConversation && !conversation && didInitialConversationLoadRef.current;
+
+  if (showConversationNotFound) {
     return (
       <div className="flex items-center justify-center h-full w-full bg-white">
         <div className="text-center">
@@ -1003,23 +1033,37 @@ export const Chat: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full min-h-0 w-full bg-white relative">
-      <ChatHeader
-        conversation={conversation}
-        onBack={() => navigate("/inbox")}
-        onManageTags={() => setIsManageTagsOpen(true)}
-        onAccept={handleAcceptConversation}
-        onClose={handleCloseConversation}
-        onRefresh={loadConversation}
-        onTransfer={() => setIsTransferOpen(true)}
-        acceptDisabled={
-          acceptingConversation ||
-          !authUser ||
-          conversation.status !== "pending"
-        }
-        closeDisabled={
-          closingConversation || !authUser || conversation.status === "closed"
-        }
-      />
+      {loadingConversation ? (
+        <div className="flex items-center gap-3 shrink-0 border-b border-gray-200 px-4 py-3 bg-white">
+          <button
+            type="button"
+            onClick={() => navigate("/inbox")}
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600"
+            aria-label="Voltar"
+          >
+            <ArrowLeftIcon className="w-5 h-5 text-[#1E1E1E]" />
+          </button>
+          <p className="text-gray-500 text-sm">Carregando conversa...</p>
+        </div>
+      ) : conversation ? (
+        <ChatHeader
+          conversation={conversation}
+          onBack={() => navigate("/inbox")}
+          onManageTags={() => setIsManageTagsOpen(true)}
+          onAccept={handleAcceptConversation}
+          onClose={handleCloseConversation}
+          onRefresh={loadConversation}
+          onTransfer={() => setIsTransferOpen(true)}
+          acceptDisabled={
+            acceptingConversation ||
+            !authUser ||
+            conversation.status !== "pending"
+          }
+          closeDisabled={
+            closingConversation || !authUser || conversation.status === "closed"
+          }
+        />
+      ) : null}
 
       <div
         ref={messagesContainerRef}
@@ -1043,48 +1087,13 @@ export const Chat: React.FC = () => {
           <>
             {timelineItems.map((item) =>
               item.kind === "message" ? (
-                <div key={`message-${item.message.id}`} className="space-y-1">
+                <div key={`message-${item.message.id}`}>
                   <MessageBubble
                     message={item.message}
-                    contactName={conversation.contactName}
+                    contactName={conversation?.contactName ?? ""}
                     onRetry={handleRetryLocalMessage}
+                    onRetryTranscript={handleRetryAudioTranscript}
                   />
-
-                  {/* ✅ UI de falha/reenvio SEM mexer no MessageBubble */}
-                  {(() => {
-                    const m = item.message as any as Message & LocalMessageMeta;
-                    const isFailed =
-                      m.author === "atendente" && m.localStatus === "failed";
-                    const isSending =
-                      m.author === "atendente" && m.localStatus === "sending";
-
-                    if (!isFailed && !isSending) return null;
-
-                    return (
-                      <div className="flex items-center justify-end gap-2">
-                        {isSending && (
-                          <span className="text-xs text-gray-400">
-                            Enviando...
-                          </span>
-                        )}
-
-                        {isFailed && (
-                          <>
-                            <span className="text-xs text-red-600">
-                              Não enviada
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleRetryLocalMessage(m)}
-                              className="text-xs font-medium text-blue-600 hover:text-blue-700"
-                            >
-                              Reenviar
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })()}
                 </div>
               ) : (
                 <SystemEventBubble
@@ -1192,7 +1201,7 @@ export const Chat: React.FC = () => {
         currentDepartmentId={departmentId}
       />
 
-      {conversation.status === "open" && (
+      {conversation?.status === "open" && (
         <MessageInput onSend={handleSendMessage} disabled={!canReply} />
       )}
     </div>

@@ -17,6 +17,8 @@ type DbMessage = {
   media_mime_type?: string | null;
   caption?: string | null;
   filename?: string | null;
+  transcript_status?: "PENDING" | "PROCESSING" | "DONE" | "FAILED" | null;
+  transcript_text?: string | null;
 };
 
 const safeParsePayload = (raw: any) => {
@@ -59,6 +61,21 @@ const getMediaData = (payload: any) => {
       return { type: "document", data: candidate.document };
   }
   return { type: undefined, data: undefined };
+};
+
+const normalizeTranscriptStatus = (
+  value: unknown,
+): "PENDING" | "PROCESSING" | "DONE" | "FAILED" | undefined => {
+  if (typeof value !== "string") return undefined;
+  if (
+    value === "PENDING" ||
+    value === "PROCESSING" ||
+    value === "DONE" ||
+    value === "FAILED"
+  ) {
+    return value;
+  }
+  return undefined;
 };
 
 export const mapDbMessage = (row: DbMessage): UiMessage => {
@@ -106,6 +123,20 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
     undefined;
 
   const direction = row.direction as "inbound" | "outbound" | undefined;
+  const transcriptStatus = normalizeTranscriptStatus(
+    row.transcript_status ??
+      payload?.transcript_status ??
+      payload?.transcript?.status,
+  );
+
+  const transcriptText =
+    row.transcript_text ??
+    payload?.transcript_text ??
+    payload?.transcript?.text ??
+    payload?.transcription?.text ??
+    payload?.transcription ??
+    payload?.deepgram?.transcript ??
+    undefined;
 
   return {
     id: row.id,
@@ -118,6 +149,9 @@ export const mapDbMessage = (row: DbMessage): UiMessage => {
     mediaMimeType: mediaMimeType ?? undefined,
     filename: filename ?? undefined,
     fileSize: fileSize ?? undefined,
+    transcriptStatus: transcriptStatus ?? undefined,
+    transcriptText:
+      typeof transcriptText === "string" ? transcriptText : undefined,
     payload,
     createdAt: row.sent_at ?? row.created_at ?? new Date().toISOString(),
   };
@@ -212,6 +246,9 @@ export function useMessages(conversationId: string | null) {
 
   const didInitialLoadRef = useRef(false);
   const activeConversationIdRef = useRef<string | null>(conversationId);
+  const fetchMessagesRef = useRef<
+    (opts?: { reason?: "initial" | "refetch" }) => Promise<void>
+  >(() => Promise.resolve());
 
   useEffect(() => {
     activeConversationIdRef.current = conversationId;
@@ -283,7 +320,9 @@ export function useMessages(conversationId: string | null) {
             image_url,
             media_url,
             media_mime_type,
-            filename
+            filename,
+            transcript_status,
+            transcript_text
           `,
         )
         .eq("conversation_id", conversationId)
@@ -314,16 +353,21 @@ export function useMessages(conversationId: string | null) {
   );
 
   useEffect(() => {
+    fetchMessagesRef.current = fetchMessages;
+  }, [fetchMessages]);
+
+  useEffect(() => {
     if (!conversationId) return;
 
     const cached = messagesCache.get(conversationId);
+    const fn = fetchMessagesRef.current;
     if (cached && cached.length) {
-      fetchMessages({ reason: "refetch" });
+      fn({ reason: "refetch" });
       return;
     }
 
-    fetchMessages({ reason: "initial" });
-  }, [conversationId, fetchMessages]);
+    fn({ reason: "initial" });
+  }, [conversationId]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -380,6 +424,38 @@ export function useMessages(conversationId: string | null) {
                 new Date(b.createdAt).getTime(),
             );
 
+            messagesCache.set(conversationId, next);
+            return next;
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const updatedMsg = mapDbMessage(payload.new as DbMessage);
+
+          setMessages((current) => {
+            const existingIdx = current.findIndex((m) => m.id === updatedMsg.id);
+            if (existingIdx < 0) return current;
+
+            const existing = current[existingIdx];
+            const merged: UiMessage = {
+              ...existing,
+              ...updatedMsg,
+              filename: updatedMsg.filename ?? existing.filename,
+              fileSize: updatedMsg.fileSize ?? existing.fileSize,
+              mediaUrl: updatedMsg.mediaUrl ?? existing.mediaUrl,
+              mediaMimeType: updatedMsg.mediaMimeType ?? existing.mediaMimeType,
+              text: updatedMsg.text ?? existing.text,
+            };
+
+            const next = current.map((m, i) => (i === existingIdx ? merged : m));
             messagesCache.set(conversationId, next);
             return next;
           });

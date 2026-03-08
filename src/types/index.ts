@@ -11,6 +11,7 @@ export type Tag = {
 export type MessageDirection = "inbound" | "outbound";
 
 export type MessageSendStatus = "sending" | "failed" | "sent";
+export type TranscriptStatus = "PENDING" | "PROCESSING" | "DONE" | "FAILED";
 
 export type Conversation = {
   id: string;
@@ -48,6 +49,8 @@ export type Message = {
   fileSize?: number;
   payload?: any;
   caption?: string;
+  transcriptStatus?: TranscriptStatus;
+  transcriptText?: string;
   createdAt: string;
 
   localStatus?: MessageSendStatus;

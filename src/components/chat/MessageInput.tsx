@@ -29,6 +29,23 @@ interface MessageInputProps {
   disabledReason?: string;
 }
 
+type AllowedImageMime = "image/jpeg" | "image/png";
+type AllowedAudioMime =
+  | "audio/aac"
+  | "audio/amr"
+  | "audio/mpeg"
+  | "audio/mp4"
+  | "audio/ogg";
+type AllowedDocumentMime =
+  | "text/plain"
+  | "application/pdf"
+  | "application/msword"
+  | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  | "application/vnd.ms-excel"
+  | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  | "application/vnd.ms-powerpoint"
+  | "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
 export const MessageInput: React.FC<MessageInputProps> = ({
   onSend,
   disabled = false,
@@ -50,7 +67,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const recordStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Fecha popups ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -67,7 +83,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Se ficar disabled, fecha popups e para gravação
   useEffect(() => {
     if (!disabled) return;
 
@@ -87,7 +102,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     setIsSendingAudio(false);
   }, [disabled]);
 
-  // Limpa gravação e stream ao desmontar
   useEffect(
     () => () => {
       if (
@@ -101,7 +115,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     [],
   );
 
-  // Contador de gravação
   useEffect(() => {
     if (!isRecording) {
       setRecordSeconds(0);
@@ -148,6 +161,219 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const AUDIO_CONVERTER_URL = import.meta.env.VITE_AUDIO_CONVERTER_URL;
   const AUDIO_CONVERTER_KEY = import.meta.env.VITE_AUDIO_CONVERTER_KEY;
 
+  const normalizeMimeType = (value?: string | null) =>
+    (value || "").toLowerCase().trim();
+
+  const getExtension = (filename: string) =>
+    filename.split(".").pop()?.toLowerCase() || "";
+
+  const isZipSignature = (bytes: Uint8Array) =>
+    bytes.length >= 4 &&
+    bytes[0] === 0x50 &&
+    bytes[1] === 0x4b &&
+    bytes[2] === 0x03 &&
+    bytes[3] === 0x04;
+
+  const isOleSignature = (bytes: Uint8Array) =>
+    bytes.length >= 8 &&
+    bytes[0] === 0xd0 &&
+    bytes[1] === 0xcf &&
+    bytes[2] === 0x11 &&
+    bytes[3] === 0xe0 &&
+    bytes[4] === 0xa1 &&
+    bytes[5] === 0xb1 &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0xe1;
+
+  const detectRealImageMimeType = async (
+    file: File,
+  ): Promise<AllowedImageMime | null> => {
+    const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+
+    const isJpeg =
+      header.length >= 3 &&
+      header[0] === 0xff &&
+      header[1] === 0xd8 &&
+      header[2] === 0xff;
+
+    if (isJpeg) return "image/jpeg";
+
+    const isPng =
+      header.length >= 8 &&
+      header[0] === 0x89 &&
+      header[1] === 0x50 &&
+      header[2] === 0x4e &&
+      header[3] === 0x47 &&
+      header[4] === 0x0d &&
+      header[5] === 0x0a &&
+      header[6] === 0x1a &&
+      header[7] === 0x0a;
+
+    if (isPng) return "image/png";
+
+    return null;
+  };
+
+  const validateAudioFile = async (
+    file: File,
+  ): Promise<{ mimeType: AllowedAudioMime; extension: string } | null> => {
+    const mimeType = normalizeMimeType(file.type);
+    const extension = getExtension(file.name);
+    const header = new Uint8Array(await file.slice(0, 32).arrayBuffer());
+
+    const isOgg =
+      header.length >= 4 &&
+      header[0] === 0x4f &&
+      header[1] === 0x67 &&
+      header[2] === 0x67 &&
+      header[3] === 0x53;
+
+    if (
+      isOgg &&
+      extension === "ogg" &&
+      (mimeType === "audio/ogg" || mimeType === "application/ogg")
+    ) {
+      return { mimeType: "audio/ogg", extension: "ogg" };
+    }
+
+    const isAmr =
+      header.length >= 6 &&
+      header[0] === 0x23 &&
+      header[1] === 0x21 &&
+      header[2] === 0x41 &&
+      header[3] === 0x4d &&
+      header[4] === 0x52 &&
+      header[5] === 0x0a;
+
+    if (isAmr && extension === "amr" && mimeType === "audio/amr") {
+      return { mimeType: "audio/amr", extension: "amr" };
+    }
+
+    const isAacAdts =
+      header.length >= 2 &&
+      header[0] === 0xff &&
+      (header[1] === 0xf1 || header[1] === 0xf9);
+
+    if (
+      isAacAdts &&
+      extension === "aac" &&
+      (mimeType === "audio/aac" || mimeType === "audio/x-aac")
+    ) {
+      return { mimeType: "audio/aac", extension: "aac" };
+    }
+
+    const isMp3 =
+      (header.length >= 3 &&
+        header[0] === 0x49 &&
+        header[1] === 0x44 &&
+        header[2] === 0x33) ||
+      (header.length >= 2 && header[0] === 0xff && (header[1] & 0xe0) === 0xe0);
+
+    if (
+      isMp3 &&
+      extension === "mp3" &&
+      (mimeType === "audio/mpeg" || mimeType === "audio/mp3")
+    ) {
+      return { mimeType: "audio/mpeg", extension: "mp3" };
+    }
+
+    const box = new TextDecoder().decode(header.slice(4, 12));
+    const isM4a =
+      header.length >= 12 &&
+      box.startsWith("ftyp") &&
+      extension === "m4a" &&
+      (mimeType === "audio/mp4" ||
+        mimeType === "audio/x-m4a" ||
+        mimeType === "audio/m4a");
+
+    if (isM4a) {
+      return { mimeType: "audio/mp4", extension: "m4a" };
+    }
+
+    return null;
+  };
+
+  const validateDocumentFile = async (
+    file: File,
+  ): Promise<{ mimeType: AllowedDocumentMime; extension: string } | null> => {
+    const mimeType = normalizeMimeType(file.type);
+    const extension = getExtension(file.name);
+    const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+
+    const isPdf =
+      header.length >= 5 &&
+      header[0] === 0x25 &&
+      header[1] === 0x50 &&
+      header[2] === 0x44 &&
+      header[3] === 0x46 &&
+      header[4] === 0x2d;
+
+    if (isPdf && extension === "pdf" && mimeType === "application/pdf") {
+      return { mimeType: "application/pdf", extension: "pdf" };
+    }
+
+    const isTxt = extension === "txt" && mimeType === "text/plain";
+    if (isTxt) {
+      return { mimeType: "text/plain", extension: "txt" };
+    }
+
+    const isOle = isOleSignature(header);
+    if (isOle) {
+      if (extension === "doc" && mimeType === "application/msword") {
+        return { mimeType: "application/msword", extension: "doc" };
+      }
+
+      if (extension === "xls" && mimeType === "application/vnd.ms-excel") {
+        return { mimeType: "application/vnd.ms-excel", extension: "xls" };
+      }
+
+      if (extension === "ppt" && mimeType === "application/vnd.ms-powerpoint") {
+        return { mimeType: "application/vnd.ms-powerpoint", extension: "ppt" };
+      }
+    }
+
+    const isZip = isZipSignature(header);
+    if (isZip) {
+      if (
+        extension === "docx" &&
+        mimeType ===
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ) {
+        return {
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          extension: "docx",
+        };
+      }
+
+      if (
+        extension === "xlsx" &&
+        mimeType ===
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ) {
+        return {
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          extension: "xlsx",
+        };
+      }
+
+      if (
+        extension === "pptx" &&
+        mimeType ===
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ) {
+        return {
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          extension: "pptx",
+        };
+      }
+    }
+
+    return null;
+  };
+
   const convertWebmToOgg = async (webmBlob: Blob): Promise<Blob> => {
     const fd = new FormData();
     fd.append("file", webmBlob, `voice-${Date.now()}.webm`);
@@ -176,16 +402,23 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     return oggBlob;
   };
 
-  // Upload genérico para Supabase (imagem / audio / documento)
   const uploadFileToSupabase = async (
     file: File,
     kind: "image" | "audio" | "document",
+    options?: {
+      contentType?: string;
+      extension?: string;
+    },
   ) => {
     const extFromName = file.name.split(".").pop();
     const defaultExt =
       kind === "image" ? "jpg" : kind === "audio" ? "mp3" : "bin";
 
-    const fileExt = (extFromName || defaultExt).toLowerCase();
+    const fileExt = (
+      options?.extension ||
+      extFromName ||
+      defaultExt
+    ).toLowerCase();
     const fileName = `${Date.now()}-${Math.random()
       .toString(36)
       .slice(2)}.${fileExt}`;
@@ -205,6 +438,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         cacheControl: "3600",
         upsert: false,
         contentType:
+          options?.contentType ||
           file.type ||
           (kind === "image"
             ? "image/jpeg"
@@ -238,7 +472,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       type: "audio/ogg",
     });
 
-    const { publicUrl } = await uploadFileToSupabase(oggFile, "audio");
+    const { publicUrl } = await uploadFileToSupabase(oggFile, "audio", {
+      contentType: "audio/ogg",
+      extension: "ogg",
+    });
 
     onSend({
       type: "audio",
@@ -247,7 +484,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     });
   };
 
-  // 🎙 Inicia gravação
   const startRecording = async () => {
     if (disabled) return;
 
@@ -354,14 +590,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     fileInputRef.current?.click();
   };
 
-  const handleAudioOption = () => {
-    if (disabled) return;
-
-    setShowAttachments(false);
-    audioInputRef.current?.click();
-  };
-
-  // Imagens (JPG/PNG)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (disabled) {
       e.target.value = "";
@@ -372,12 +600,26 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (!files || files.length === 0) return;
 
     const allFiles = Array.from(files);
-    const validImages = allFiles.filter((file) =>
-      ["image/jpeg", "image/png"].includes(file.type),
-    );
+    const validImages: Array<{
+      file: File;
+      mimeType: AllowedImageMime;
+      extension: "jpg" | "png";
+    }> = [];
+
+    for (const file of allFiles) {
+      const realMimeType = await detectRealImageMimeType(file);
+
+      if (!realMimeType) continue;
+
+      validImages.push({
+        file,
+        mimeType: realMimeType,
+        extension: realMimeType === "image/png" ? "png" : "jpg",
+      });
+    }
 
     if (validImages.length === 0) {
-      alert("Por enquanto só aceitamos imagens JPG ou PNG.");
+      alert("Por enquanto só aceitamos imagens JPG ou PNG válidas.");
       e.target.value = "";
       return;
     }
@@ -388,13 +630,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
 
     try {
-      for (const file of validImages) {
-        const { publicUrl } = await uploadFileToSupabase(file, "image");
+      for (const image of validImages) {
+        const { publicUrl } = await uploadFileToSupabase(image.file, "image", {
+          contentType: image.mimeType,
+          extension: image.extension,
+        });
 
         onSend({
           type: "image",
           mediaUrl: publicUrl,
-          mediaMimeType: file.type || "image/jpeg",
+          mediaMimeType: image.mimeType,
         });
       }
     } catch (err) {
@@ -405,7 +650,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
-  // Audio selecionado manualmente
   const handleAudioChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (disabled) {
       e.target.value = "";
@@ -416,23 +660,29 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (!files || files.length === 0) return;
 
     const file = files[0];
+    const validAudio = await validateAudioFile(file);
 
-    if (!file.type.startsWith("audio/")) {
-      console.warn("Arquivo selecionado não é áudio");
+    if (!validAudio) {
+      console.warn("Arquivo selecionado não é um áudio suportado");
+      alert("Por enquanto só aceitamos áudios AAC, AMR, MP3, M4A ou OGG.");
       e.target.value = "";
       return;
     }
 
     try {
-      const { publicUrl } = await uploadFileToSupabase(file, "audio");
+      const { publicUrl } = await uploadFileToSupabase(file, "audio", {
+        contentType: validAudio.mimeType,
+        extension: validAudio.extension,
+      });
 
       onSend({
         type: "audio",
         mediaUrl: publicUrl,
-        mediaMimeType: file.type || "audio/*",
+        mediaMimeType: validAudio.mimeType,
       });
     } catch (err) {
       console.error("Erro ao enviar áudio:", err);
+      alert("Não foi possível enviar o áudio.");
     } finally {
       e.target.value = "";
     }
@@ -450,14 +700,26 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (!files || files.length === 0) return;
 
     const file = files[0];
+    const validDocument = await validateDocumentFile(file);
+
+    if (!validDocument) {
+      alert(
+        "Por enquanto só aceitamos documentos TXT, PDF, DOC, DOCX, XLS, XLSX, PPT ou PPTX.",
+      );
+      e.target.value = "";
+      return;
+    }
 
     try {
-      const { publicUrl } = await uploadFileToSupabase(file, "document");
+      const { publicUrl } = await uploadFileToSupabase(file, "document", {
+        contentType: validDocument.mimeType,
+        extension: validDocument.extension,
+      });
 
       onSend({
         type: "document",
         mediaUrl: publicUrl,
-        mediaMimeType: file.type || "application/octet-stream",
+        mediaMimeType: validDocument.mimeType,
         filename: file.name,
         fileSize: file.size,
         text: message.trim() || undefined,
@@ -618,7 +880,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         />
       </form>
 
-      {/* Inputs "invisíveis" para arquivos */}
       <input
         style={{ display: "none" }}
         ref={fileInputRef}
@@ -633,7 +894,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         style={{ display: "none" }}
         ref={audioInputRef}
         type="file"
-        accept="audio/*"
+        accept=".aac,.amr,.mp3,.m4a,.ogg,audio/aac,audio/amr,audio/mpeg,audio/mp4,audio/ogg"
         className="invisible"
         onChange={handleAudioChange}
       />
@@ -642,7 +903,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         style={{ display: "none" }}
         ref={docInputRef}
         type="file"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/pdf"
+        accept=".txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
         className="invisible"
         onChange={handleDocumentChange}
       />

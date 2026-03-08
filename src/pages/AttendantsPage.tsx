@@ -1,10 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangleIcon,
-  CheckCircle2Icon,
   ChevronDownIcon,
   FilterIcon,
-  Settings2Icon,
   Trash2Icon,
   UsersIcon,
 } from "lucide-react";
@@ -12,6 +10,7 @@ import { Input } from "../components/ui/Input";
 import { Badge } from "../components/ui/Badge";
 import { supabase } from "../lib/supabaseClient";
 import { useClinic } from "../contexts/ClinicContext";
+import { toast } from "react-toastify";
 
 type Role = "admin" | "agent";
 
@@ -43,26 +42,15 @@ type DepartmentMemberRow = {
   clinic_user_id: string;
 };
 
-type Toast = {
-  id: string;
-  message: string;
-  type: "success" | "error" | "info";
-};
-
 type ActionError = {
-  message: string;
+  error: any;
+  fallbackMessage: string;
   isPermission: boolean;
 };
 
 type RoleFilter = "all" | Role;
 
 type ModalMode = "edit" | "remove" | "invite";
-
-const buildToast = (message: string, type: Toast["type"]) => ({
-  id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-  message,
-  type,
-});
 
 const isPermissionError = (
   error: { status?: number; code?: string } | null,
@@ -71,23 +59,121 @@ const isPermissionError = (
   return error.status === 401 || error.status === 403 || error.code === "42501";
 };
 
-const useToasts = () => {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+const translateBackendErrorToPtBr = (message: string) => {
+  const normalized = message.trim();
+  const lower = normalized.toLowerCase();
 
-  const pushToast = useCallback((toast: Toast) => {
-    setToasts((prev) => [...prev, toast]);
-  }, []);
+  if (
+    lower.includes("a user with this email address has already been registered")
+  ) {
+    return "Já existe um usuário cadastrado com este e-mail.";
+  }
+  if (lower.includes("user already registered")) {
+    return "Já existe um usuário cadastrado com este e-mail.";
+  }
+  if (lower.includes("email address") && lower.includes("already")) {
+    return "Este e-mail já está em uso.";
+  }
+  if (lower.includes("invalid login credentials")) {
+    return "Credenciais de acesso inválidas.";
+  }
+  if (lower.includes("permission denied")) {
+    return "Você não tem permissão para esta ação.";
+  }
+  if (lower.includes("error sending invite email")) {
+    return "Erro ao enviar convite, tente novamente mais tarde.";
+  }
 
-  useEffect(() => {
-    if (toasts.length === 0) return;
-    const timer = window.setTimeout(() => {
-      setToasts((prev) => prev.slice(1));
-    }, 3200);
+  return normalized;
+};
 
-    return () => window.clearTimeout(timer);
-  }, [toasts]);
+const tryParseJsonMessage = (value: string) => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
 
-  return { toasts, pushToast };
+const getBackendErrorMessage = (error: any, fallbackMessage: string) => {
+  if (!error) return fallbackMessage;
+
+  const rawCandidates: unknown[] = [
+    error?.message,
+    error?.details,
+    error?.error_description,
+    error?.msg,
+  ];
+
+  const pushParsedMessage = (target: unknown[], raw: unknown) => {
+    if (typeof raw !== "string") return;
+    const parsed = tryParseJsonMessage(raw);
+    if (!parsed || typeof parsed !== "object") return;
+
+    target.push((parsed as any)?.message, (parsed as any)?.error);
+    target.push((parsed as any)?.details, (parsed as any)?.error_description);
+  };
+
+  for (const candidate of [...rawCandidates]) {
+    pushParsedMessage(rawCandidates, candidate);
+  }
+
+  for (const candidate of rawCandidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return translateBackendErrorToPtBr(candidate);
+    }
+  }
+
+  return fallbackMessage;
+};
+
+const getFunctionResponseMessage = async (error: any) => {
+  const response = error?.context;
+  if (!(response instanceof Response)) return null;
+
+  try {
+    const cloned = response.clone();
+    const contentType = cloned.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      const data = await cloned.json();
+      const candidates = [
+        data?.message,
+        data?.error,
+        data?.details,
+        data?.error_description,
+      ];
+
+      for (const item of candidates) {
+        if (typeof item === "string" && item.trim()) {
+          return translateBackendErrorToPtBr(item);
+        }
+      }
+    }
+
+    const text = (await cloned.text())?.trim();
+    if (!text) return null;
+
+    const parsed = tryParseJsonMessage(text);
+    if (parsed && typeof parsed === "object") {
+      const candidates = [
+        (parsed as any).message,
+        (parsed as any).error,
+        (parsed as any).details,
+        (parsed as any).error_description,
+      ];
+
+      for (const item of candidates) {
+        if (typeof item === "string" && item.trim()) {
+          return translateBackendErrorToPtBr(item);
+        }
+      }
+    }
+
+    return translateBackendErrorToPtBr(text);
+  } catch {
+    return null;
+  }
 };
 
 const RoleBadge: React.FC<{ role: Role }> = ({ role }) => (
@@ -105,28 +191,6 @@ const StatusBadge: React.FC<{ status: "active" | "inactive" }> = ({
 );
 
 const Divider: React.FC = () => <div className="h-px w-full bg-gray-100" />;
-
-const ToastList: React.FC<{ toasts: Toast[] }> = ({ toasts }) => (
-  <div className="fixed right-6 top-20 z-50 flex flex-col gap-3">
-    {toasts.map((toast) => (
-      <div
-        key={toast.id}
-        className="flex items-start gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-lg"
-      >
-        {toast.type === "success" && (
-          <CheckCircle2Icon className="h-4 w-4 text-emerald-500" />
-        )}
-        {toast.type === "error" && (
-          <AlertTriangleIcon className="h-4 w-4 text-rose-500" />
-        )}
-        {toast.type === "info" && (
-          <Settings2Icon className="h-4 w-4 text-blue-500" />
-        )}
-        <span className="text-sm text-gray-700">{toast.message}</span>
-      </div>
-    ))}
-  </div>
-);
 
 const Modal: React.FC<{
   title: string;
@@ -228,8 +292,6 @@ export const AttendantsPage: React.FC = () => {
   );
   const [isInviting, setIsInviting] = useState(false);
 
-  const { toasts, pushToast } = useToasts();
-
   const departmentsById = useMemo(() => {
     return departments.reduce<Record<string, Department>>((acc, dept) => {
       acc[dept.id] = dept;
@@ -256,16 +318,15 @@ export const AttendantsPage: React.FC = () => {
     });
   }, [clinicUsers, departmentFilter, roleFilter, search]);
 
-  const handleActionError = useCallback(
-    (errorDetail: ActionError) => {
-      if (errorDetail.isPermission) {
-        pushToast(buildToast("Você não tem permissão para esta ação", "error"));
-      } else {
-        pushToast(buildToast(errorDetail.message, "error"));
-      }
-    },
-    [pushToast],
-  );
+  const handleActionError = useCallback((errorDetail: ActionError) => {
+    if (errorDetail.isPermission) {
+      toast.error("Você não tem permissão para esta ação");
+    } else {
+      toast.error(
+        getBackendErrorMessage(errorDetail.error, errorDetail.fallbackMessage),
+      );
+    }
+  }, []);
 
   const countAdmins = useCallback(async () => {
     if (!clinicId) return 0;
@@ -277,7 +338,8 @@ export const AttendantsPage: React.FC = () => {
 
     if (countError) {
       handleActionError({
-        message: countError.message,
+        error: countError,
+        fallbackMessage: "Erro ao contar administradores",
         isPermission: isPermissionError(countError),
       });
       return 0;
@@ -455,7 +517,9 @@ export const AttendantsPage: React.FC = () => {
       setHasDepartmentMembers(available);
       setDepartmentMembers(data);
     } catch (fetchError: any) {
-      setError(fetchError.message ?? "Erro ao carregar atendentes");
+      setError(
+        getBackendErrorMessage(fetchError, "Erro ao carregar atendentes"),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -521,9 +585,7 @@ export const AttendantsPage: React.FC = () => {
     if (!editingUser || !clinicId) return;
 
     if (isLastAdminDemotion) {
-      pushToast(
-        buildToast("Você não pode rebaixar o último admin da clínica", "error"),
-      );
+      toast.error("Você não pode rebaixar o último admin da clínica");
       return;
     }
 
@@ -552,12 +614,13 @@ export const AttendantsPage: React.FC = () => {
         await setUserDepartments(editingUser.user_id, [...nextDepartments]);
       }
 
-      pushToast(buildToast("Alterações salvas com sucesso", "success"));
+      toast.success("Alterações salvas com sucesso");
       await refreshData();
       handleCloseModal();
     } catch (saveError: any) {
       handleActionError({
-        message: saveError.message ?? "Erro ao salvar alterações",
+        error: saveError,
+        fallbackMessage: "Erro ao salvar alterações",
         isPermission: isPermissionError(saveError),
       });
     } finally {
@@ -581,12 +644,13 @@ export const AttendantsPage: React.FC = () => {
         throw deleteError;
       }
 
-      pushToast(buildToast("Acesso removido com sucesso", "success"));
+      toast.success("Acesso removido com sucesso");
       await refreshData();
       handleCloseModal();
     } catch (removeError: any) {
       handleActionError({
-        message: removeError.message ?? "Erro ao remover acesso",
+        error: removeError,
+        fallbackMessage: "Erro ao remover acesso",
         isPermission: isPermissionError(removeError),
       });
     } finally {
@@ -604,7 +668,7 @@ export const AttendantsPage: React.FC = () => {
 
     const email = inviteEmail.trim().toLowerCase();
     if (!email) {
-      pushToast(buildToast("Informe um email para enviar o convite", "error"));
+      toast.error("Informe um email para enviar o convite");
       return;
     }
 
@@ -628,12 +692,15 @@ export const AttendantsPage: React.FC = () => {
         throw inviteError;
       }
 
-      pushToast(buildToast("Convite enviado com sucesso", "success"));
+      toast.success("Convite enviado com sucesso");
       await refreshData();
       handleCloseModal();
     } catch (inviteErr: any) {
+      const functionMessage = await getFunctionResponseMessage(inviteErr);
+
       handleActionError({
-        message: inviteErr.message ?? "Erro ao enviar convite",
+        error: functionMessage ? { message: functionMessage } : inviteErr,
+        fallbackMessage: "Erro ao enviar convite, tente novamente mais tarde",
         isPermission: isPermissionError(inviteErr),
       });
     } finally {
@@ -643,7 +710,6 @@ export const AttendantsPage: React.FC = () => {
 
   return (
     <div className="flex h-full flex-1 flex-col bg-gray-50">
-      <ToastList toasts={toasts} />
       <div className="border-b bg-white px-8 py-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -756,9 +822,7 @@ export const AttendantsPage: React.FC = () => {
           <EmptyState
             onAction={() => {
               if (!isAdmin) {
-                pushToast(
-                  buildToast("Você não tem permissão para esta ação", "error"),
-                );
+                toast.error("Você não tem permissão para esta ação");
                 return;
               }
               handleOpenInvite();

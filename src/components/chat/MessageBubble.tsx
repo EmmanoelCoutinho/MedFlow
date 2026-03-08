@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { DownloadIcon, FileIcon } from "lucide-react";
 import type { Message as UiMessage } from "../../types";
+import { AudioTranscriptStatus } from "./AudioTranscriptStatus";
 
 interface MessageBubbleProps {
   message: UiMessage;
@@ -8,10 +9,11 @@ interface MessageBubbleProps {
   contactName?: string;
 
   /**
-   * Opcional: usado para permitir "Reenviar" quando a mensagem é local e falhou.
-   * Você deve passar essa função a partir do Chat.tsx.
+   * Opcional: usado para permitir "Reenviar" quando a mensagem e local e falhou.
+   * Voce deve passar essa funcao a partir do Chat.tsx.
    */
   onRetry?: (message: UiMessage) => void;
+  onRetryTranscript?: (message: UiMessage) => Promise<void> | void;
 }
 
 type LocalSendStatus = "sending" | "failed" | "sent";
@@ -106,6 +108,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   contactAvatar,
   contactName,
   onRetry,
+  onRetryTranscript,
 }) => {
   const payload = message.payload ?? {};
   const isClient = message.author === "cliente";
@@ -144,6 +147,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     payload?.image?.caption ?? payload?.document?.caption ?? null;
 
   const displayText = message.text || captionFromPayload || "";
+  const transcriptStatus = message.transcriptStatus;
+  const transcriptText = message.transcriptText;
 
   const documentData =
     payload?.document ??
@@ -179,8 +184,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const hasMedia = Boolean(mediaUrl);
 
-  const onlyAudio =
-    mediaType === "audio" && (!displayText || !displayText.trim());
+  const onlyAudio = mediaType === "audio";
   const onlyDocument =
     mediaType === "document" && (!displayText || !displayText.trim());
 
@@ -213,7 +217,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (localStatus === "failed") {
       return (
         <div className="flex items-center justify-end gap-2 mt-1">
-          <span className="text-xs text-red-600">Não enviada</span>
+          <span className="text-xs text-red-600">Nao enviada</span>
 
           {typeof onRetry === "function" && (
             <button
@@ -280,20 +284,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 )}
 
                 {mediaType === "audio" && (
-                  <div
-                    className={`
-                      flex items-center gap-3 rounded-2xl px-3 py-2
-                      ${isClient ? "bg-[#E5E7EB]" : "bg-[#0A84FF]"}
-                      text-[#1E1E1E]
-                    `}
-                  >
-                    <audio
-                      controls
-                      className="w-56 h-9 bg-transparent outline-none"
-                      src={mediaUrl}
+                  <div className="space-y-1">
+                    <div
+                      className={`
+                        flex items-center gap-3 rounded-2xl px-3 py-2
+                        ${isClient ? "bg-[#E5E7EB]" : "bg-[#0A84FF]"}
+                        text-[#1E1E1E]
+                      `}
                     >
-                      Seu navegador não suporta o player de áudio.
-                    </audio>
+                      <audio
+                        controls
+                        className="w-56 h-9 bg-transparent outline-none"
+                        src={mediaUrl}
+                      >
+                        Seu navegador nao suporta o player de audio.
+                      </audio>
+                    </div>
+                    <AudioTranscriptStatus
+                      status={transcriptStatus}
+                      transcriptText={transcriptText}
+                      onRetry={
+                        onRetryTranscript
+                          ? () => onRetryTranscript(message)
+                          : undefined
+                      }
+                    />
                   </div>
                 )}
 
@@ -339,12 +354,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </>
             )}
 
-            {displayText && !onlyAudio ? (
+            {displayText && mediaType !== "audio" && !onlyAudio ? (
               <p className="text-sm">{displayText}</p>
             ) : null}
           </div>
 
-          {/* ✅ status (enviando / falhou / reenviar) */}
           {statusNode}
           {errorHintNode}
 
@@ -376,7 +390,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         >
           <img
             src={previewSrc}
-            alt="Pré-visualização"
+            alt="Pre-visualizacao"
             className="max-h-full max-w-full rounded-lg object-contain"
             onClick={(event) => event.stopPropagation()}
           />

@@ -19,37 +19,7 @@ type DbMessage = {
   sent_at: string | null;
   type?: string | null;
   payload?: any;
-};
-
-const LAST_OPENED_STORAGE_KEY = "conversation-last-opened";
-
-const readLastOpenedAt = (): Record<string, number> => {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(LAST_OPENED_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-
-const writeLastOpenedAt = (map: Record<string, number>) => {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(LAST_OPENED_STORAGE_KEY, JSON.stringify(map));
-  } catch {}
-};
-
-export const persistConversationOpenedAt = (
-  conversationId: string,
-  timestamp = Date.now(),
-) => {
-  const current = readLastOpenedAt();
-  const next = { ...current, [conversationId]: timestamp };
-  writeLastOpenedAt(next);
-  return next;
+  created_at?: string | null;
 };
 
 export function useConversations(options: UseConversationsOptions = {}) {
@@ -61,18 +31,9 @@ export function useConversations(options: UseConversationsOptions = {}) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<any>(null);
 
-  const [lastOpenedAt, setLastOpenedAt] = useState<Record<string, number>>(() =>
-    readLastOpenedAt(),
-  );
-
-  const lastOpenedAtRef = useRef(lastOpenedAt);
   const lastRefetchAtRef = useRef(0);
   const refetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didInitialLoadRef = useRef(false);
-
-  useEffect(() => {
-    lastOpenedAtRef.current = lastOpenedAt;
-  }, [lastOpenedAt]);
 
   const parsePayload = (raw: any) => {
     if (!raw) return {};
@@ -161,6 +122,26 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return membership?.department_id ? [membership.department_id] : [];
   }, [authUser, clinicId, membership?.department_id]);
 
+  const scheduleRefetch = useCallback((fetcher: () => void) => {
+    const cooldownMs = 2500;
+    const now = Date.now();
+    const elapsed = now - lastRefetchAtRef.current;
+
+    if (elapsed >= cooldownMs) {
+      lastRefetchAtRef.current = now;
+      fetcher();
+      return;
+    }
+
+    if (refetchTimeoutRef.current) return;
+
+    refetchTimeoutRef.current = setTimeout(() => {
+      lastRefetchAtRef.current = Date.now();
+      refetchTimeoutRef.current = null;
+      fetcher();
+    }, cooldownMs - elapsed);
+  }, []);
+
   const fetchConversations = useCallback(
     async (opts?: { reason?: "initial" | "refetch" }) => {
       const reason =
@@ -169,9 +150,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
       if (!authUser || !clinicId) {
         setConversations([]);
         setError(null);
-        didInitialLoadRef.current = true;
-        setLoading(false);
-        setRefreshing(false);
+        setLoading(true);
         return;
       }
 
@@ -205,6 +184,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
             id,
             text,
             sent_at,
+            created_at,
             direction,
             type,
             payload
@@ -266,7 +246,8 @@ export function useConversations(options: UseConversationsOptions = {}) {
           );
         }
 
-        const mapped: Conversation[] =
+        // 1) monta lista sem unread (por enquanto)
+        let mapped: Conversation[] =
           data?.map((row: any) => {
             const messages = (row.messages as any[]) ?? [];
 
@@ -274,8 +255,8 @@ export function useConversations(options: UseConversationsOptions = {}) {
               .slice()
               .sort(
                 (a, b) =>
-                  new Date(b.sent_at ?? 0).getTime() -
-                  new Date(a.sent_at ?? 0).getTime(),
+                  new Date(b.sent_at ?? b.created_at ?? 0).getTime() -
+                  new Date(a.sent_at ?? a.created_at ?? 0).getTime(),
               )[0];
 
             const preview = getPreview(last);
@@ -303,14 +284,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
                 color: t.color ?? "#0A84FF",
               }));
 
-            const lastTime = new Date(
-              last?.sent_at ?? row.last_message_at ?? 0,
-            ).getTime();
-            const openedAt = lastOpenedAtRef.current[row.id];
-            const isUnread =
-              last?.direction === "inbound" &&
-              (!openedAt || lastTime > openedAt);
-
             return {
               id: row.id,
               channel: row.channel as Channel,
@@ -323,13 +296,41 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
               lastMessage: preview.text,
               lastMessageType: preview.type,
-              lastTimestamp: last?.sent_at ?? row.last_message_at ?? "",
-              unreadCount: isUnread ? 1 : 0,
+              lastTimestamp:
+                last?.sent_at ?? row.last_message_at ?? row.created_at ?? "",
+
+              // ✅ agora vem do banco (preenchido abaixo)
+              unreadCount: 0,
 
               tags,
               assignedTo: row.assigned_user_id ?? undefined,
             };
           }) ?? [];
+
+        // 2) busca unread em lote no banco e injeta
+        const ids = mapped.map((c) => c.id).filter(Boolean);
+
+        if (ids.length > 0) {
+          const { data: counts, error: countsError } = await supabase.rpc(
+            "get_unread_counts",
+            { p_user_id: authUser.id, p_conversation_ids: ids },
+          );
+
+          if (countsError) throw countsError;
+
+          const countMap = new Map<string, number>();
+          (counts ?? []).forEach((r: any) => {
+            countMap.set(
+              String(r.conversation_id),
+              Number(r.unread_count ?? 0),
+            );
+          });
+
+          mapped = mapped.map((c) => ({
+            ...c,
+            unreadCount: countMap.get(c.id) ?? 0,
+          }));
+        }
 
         setConversations(mapped);
       } catch (err: any) {
@@ -352,26 +353,11 @@ export function useConversations(options: UseConversationsOptions = {}) {
     ],
   );
 
-  const scheduleRefetch = useCallback(() => {
-    const cooldownMs = 2500;
-    const now = Date.now();
-    const elapsed = now - lastRefetchAtRef.current;
+  const scheduleRefetchStable = useCallback(() => {
+    scheduleRefetch(() => fetchConversations({ reason: "refetch" }));
+  }, [fetchConversations, scheduleRefetch]);
 
-    if (elapsed >= cooldownMs) {
-      lastRefetchAtRef.current = now;
-      fetchConversations({ reason: "refetch" });
-      return;
-    }
-
-    if (refetchTimeoutRef.current) return;
-
-    refetchTimeoutRef.current = setTimeout(() => {
-      lastRefetchAtRef.current = Date.now();
-      refetchTimeoutRef.current = null;
-      fetchConversations({ reason: "refetch" });
-    }, cooldownMs - elapsed);
-  }, [fetchConversations]);
-
+  // realtime: tags (igual)
   useEffect(() => {
     if (!authUser) return;
 
@@ -399,7 +385,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
       setConversations((current) => {
         const idx = current.findIndex((c) => c.id === conversationId);
         if (idx === -1) {
-          scheduleRefetch();
+          scheduleRefetchStable();
           return current;
         }
 
@@ -432,8 +418,9 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUser, scheduleRefetch]);
+  }, [authUser, scheduleRefetchStable]);
 
+  // realtime: update conversations (igual)
   useEffect(() => {
     if (!authUser) return;
     if (!clinicId) return;
@@ -488,7 +475,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
               }
 
               if (idx === -1) {
-                scheduleRefetch();
+                scheduleRefetchStable();
                 return current;
               }
 
@@ -519,7 +506,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
               String(prevRow?.assigned_user_id ?? "") !==
                 String(nextRow?.assigned_user_id ?? "")
             ) {
-              scheduleRefetch();
+              scheduleRefetchStable();
             }
           },
         )
@@ -532,8 +519,9 @@ export function useConversations(options: UseConversationsOptions = {}) {
       active = false;
       if (rtChannel) supabase.removeChannel(rtChannel);
     };
-  }, [authUser, clinicId, getAccessibleDepartmentIds, scheduleRefetch]);
+  }, [authUser, clinicId, getAccessibleDepartmentIds, scheduleRefetchStable]);
 
+  // inicial
   useEffect(() => {
     if (authLoading) {
       if (!didInitialLoadRef.current && conversations.length === 0) {
@@ -551,6 +539,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
     };
   }, []);
 
+  // realtime: mensagem nova
   useEffect(() => {
     if (!authUser) return;
 
@@ -570,7 +559,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
           setConversations((current) => {
             const idx = current.findIndex((c) => c.id === msg.conversation_id);
             if (idx === -1) {
-              scheduleRefetch();
+              scheduleRefetchStable();
               return current;
             }
 
@@ -582,14 +571,13 @@ export function useConversations(options: UseConversationsOptions = {}) {
               ...old,
               lastMessage: preview.text || old.lastMessage,
               lastMessageType: preview.type ?? old.lastMessageType,
-              lastTimestamp: msg.sent_at ?? old.lastTimestamp,
-              unreadCount: (() => {
-                const openedAt = lastOpenedAt[msg.conversation_id];
-                const msgTime = new Date(msg.sent_at ?? 0).getTime();
-                const isUnread = isInbound && (!openedAt || msgTime > openedAt);
-                if (!isUnread) return 0;
-                return (old.unreadCount ?? 0) + 1;
-              })(),
+              lastTimestamp: msg.sent_at ?? msg.created_at ?? old.lastTimestamp,
+
+              // ✅ não calcula por localStorage; só incrementa "optimistic"
+              // a verdade vem no refetch (get_unread_counts)
+              unreadCount: isInbound
+                ? (old.unreadCount ?? 0) + 1
+                : (old.unreadCount ?? 0),
             };
 
             const clone = [...current];
@@ -603,6 +591,9 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
             return clone;
           });
+
+          // ✅ garante consistência com o banco
+          scheduleRefetchStable();
         },
       )
       .subscribe((status) => {
@@ -612,21 +603,32 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUser, lastOpenedAt, scheduleRefetch]);
+  }, [authUser, scheduleRefetchStable]);
 
-  const markAsRead = useCallback((conversationId: string) => {
-    const now = Date.now();
-    setLastOpenedAt((current) => {
-      const next = { ...current, [conversationId]: now };
-      writeLastOpenedAt(next);
-      return next;
-    });
-    setConversations((current) =>
-      current.map((c) =>
-        c.id === conversationId ? { ...c, unreadCount: 0 } : c,
-      ),
-    );
-  }, []);
+  // ✅ agora persiste no banco
+  const markAsRead = useCallback(
+    async (conversationId: string) => {
+      if (!authUser) return;
+
+      // otimização visual imediata
+      setConversations((current) =>
+        current.map((c) =>
+          c.id === conversationId ? { ...c, unreadCount: 0 } : c,
+        ),
+      );
+
+      const { error } = await supabase.rpc("mark_conversation_read", {
+        p_conversation_id: conversationId,
+        p_user_id: authUser.id,
+      });
+
+      if (error) {
+        console.warn("mark_conversation_read falhou:", error);
+        scheduleRefetchStable();
+      }
+    },
+    [authUser, scheduleRefetchStable],
+  );
 
   return {
     conversations,
