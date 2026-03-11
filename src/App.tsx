@@ -20,6 +20,7 @@ import { AuthCallback } from "./pages/Callback";
 import { SetPassword } from "./pages/SetPassword";
 import { MetaIntegrationsPage } from "./pages/IntegrationsMetaPage";
 import { MetaCallbackPage } from "./pages/IntegrationCallbackPage";
+import { ConversationAutomationSettingsPage } from "./pages/ConversationAutomationSettingsPage";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -95,6 +96,19 @@ function RoutedApp() {
             <Route
               path="settings/integrations/meta/callback"
               element={<MetaCallbackPage />}
+            />
+            <Route
+              path="settings/automations/conversations"
+              element={<ConversationAutomationSettingsPage />}
+            />
+            <Route
+              path="settings"
+              element={
+                <Navigate
+                  to="/inbox/settings/automations/conversations"
+                  replace
+                />
+              }
             />
           </Route>
           <Route path="/" element={<Navigate to="/login" replace />} />

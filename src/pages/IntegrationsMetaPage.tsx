@@ -6,6 +6,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabaseClient";
+import { SettingsTabs } from "../components/settings/SettingsTabs";
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string | undefined;
 const META_REDIRECT_URI = import.meta.env.VITE_META_REDIRECT_URI as
@@ -171,12 +172,14 @@ export const MetaIntegrationsPage: React.FC = () => {
             <p className="text-sm text-gray-500">
               Conecte sua Página do Facebook para ativar Messenger e Instagram.
             </p>
+            <SettingsTabs />
           </div>
 
           <div className="flex items-center gap-2">
             <Button
               variant="primary"
               size="sm"
+              className="bg-blue-600"
               onClick={startOAuth}
               disabled={!clinicId}
             >

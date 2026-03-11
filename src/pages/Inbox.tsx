@@ -170,7 +170,7 @@ export const Inbox: React.FC = () => {
           <div className="p-2 absolute bottom-0 left-0">
             <button
               type="button"
-              onClick={() => navigate("/inbox/settings/integrations/meta")}
+              onClick={() => navigate("/inbox/settings")}
               className={[
                 "w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
                 "justify-center group-hover:justify-start",
