@@ -590,6 +590,12 @@ export const Chat: React.FC = () => {
     }
 
     await loadConversation();
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("inbox:tab", { detail: "open" }),
+      );
+    }
     setAcceptingConversation(false);
   }, [id, loadConversation]);
 

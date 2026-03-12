@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { DownloadIcon, FileIcon } from "lucide-react";
 import type { Message as UiMessage } from "../../types";
 import { AudioTranscriptStatus } from "./AudioTranscriptStatus";
@@ -114,6 +114,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const isClient = message.author === "cliente";
   const initials = getInitials(contactName);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // UI-only metadata (falha/envio)
   const local = (message as unknown as LocalMeta) ?? {};
@@ -149,6 +150,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const displayText = message.text || captionFromPayload || "";
   const transcriptStatus = message.transcriptStatus;
   const transcriptText = message.transcriptText;
+
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [displayText]);
 
   const documentData =
     payload?.document ??
@@ -202,6 +207,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const showStatusRow =
     !isClient && (localStatus === "sending" || localStatus === "failed");
+
+  const maxPreviewLength = 200;
+  const shouldTruncate = displayText.length > maxPreviewLength;
+  const visibleText =
+    shouldTruncate && !isExpanded
+      ? displayText.slice(0, maxPreviewLength).trimEnd()
+      : displayText;
 
   const statusNode = useMemo(() => {
     if (!showStatusRow) return null;
@@ -355,7 +367,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
 
             {displayText && mediaType !== "audio" && !onlyAudio ? (
-              <p className="text-sm">{displayText}</p>
+              <div className="text-sm whitespace-pre-wrap break-words">
+                <span>
+                  {visibleText}
+                  {shouldTruncate && !isExpanded ? "..." : ""}
+                </span>
+                {shouldTruncate && (
+                  <button
+                    type="button"
+                    onClick={() => setIsExpanded((prev) => !prev)}
+                    className="ml-2 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    {isExpanded ? "Ler menos" : "Ler mais..."}
+                  </button>
+                )}
+              </div>
             ) : null}
           </div>
 

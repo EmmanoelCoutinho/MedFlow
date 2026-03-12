@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   BotIcon,
@@ -35,6 +35,18 @@ export const Inbox: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const handleTabChange = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail === "open") {
+        setTab("open");
+      }
+    };
+
+    window.addEventListener("inbox:tab", handleTabChange);
+    return () => window.removeEventListener("inbox:tab", handleTabChange);
+  }, []);
 
   const visibleConversations = useMemo(() => {
     return conversations.filter((c) => c.status !== "closed");
