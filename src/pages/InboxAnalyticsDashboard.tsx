@@ -382,13 +382,13 @@ export const InboxAnalyticsDashboard: React.FC = () => {
               >
                 Aplicar
               </button>
-              <button
+              {/* <button
                 type="button"
                 onClick={clearFilters}
                 className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
               >
                 Limpar
-              </button>
+              </button> */}
             </div>
           </div>
 
