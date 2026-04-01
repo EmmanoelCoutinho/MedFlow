@@ -21,6 +21,8 @@ import { SetPassword } from "./pages/SetPassword";
 import { MetaIntegrationsPage } from "./pages/IntegrationsMetaPage";
 import { MetaCallbackPage } from "./pages/IntegrationCallbackPage";
 import { ConversationAutomationSettingsPage } from "./pages/ConversationAutomationSettingsPage";
+import { BotsSettingsPage } from "./pages/BotsSettingsPage";
+import { BotEditorPage } from "./pages/BotEditorPage";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -101,6 +103,9 @@ function RoutedApp() {
               path="settings/automations/conversations"
               element={<ConversationAutomationSettingsPage />}
             />
+            <Route path="bots" element={<BotsSettingsPage />} />
+            <Route path="bots/new" element={<BotEditorPage mode="new" />} />
+            <Route path="bots/edit" element={<BotEditorPage mode="edit" />} />
             <Route
               path="settings"
               element={
