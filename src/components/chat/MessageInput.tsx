@@ -8,6 +8,7 @@ import {
   LockIcon,
   MicIcon,
 } from "lucide-react";
+import { toast } from "react-toastify";
 import { Button } from "../ui/Button";
 import { supabase } from "../../lib/supabaseClient";
 import { EmojiPicker } from "./EmojiPicker";
@@ -488,7 +489,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (disabled) return;
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Seu navegador nao permite gravacao de audio.");
+      toast.error("Seu navegador nao permite gravacao de audio.");
       return;
     }
 
@@ -530,7 +531,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           await sendAudioBlob(blob);
         } catch (err) {
           console.error("Erro ao finalizar gravacao:", err);
-          alert("Nao foi possivel enviar o audio.");
+          toast.error("Nao foi possivel enviar o audio.");
         } finally {
           setIsRecording(false);
           setIsSendingAudio(false);
@@ -544,7 +545,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       setRecordSeconds(0);
     } catch (err) {
       console.error("Erro ao iniciar gravacao:", err);
-      alert("Nao foi possivel acessar o microfone.");
+      toast.error("Nao foi possivel acessar o microfone.");
       stopStreamTracks();
       setIsRecording(false);
     }
@@ -619,14 +620,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     }
 
     if (validImages.length === 0) {
-      alert("Por enquanto só aceitamos imagens JPG ou PNG válidas.");
+      toast.info("Por enquanto so aceitamos imagens JPG ou PNG validas.");
       e.target.value = "";
       return;
     }
 
     if (validImages.length < allFiles.length) {
       console.warn("Alguns arquivos foram ignorados por não serem JPG/PNG.");
-      alert("Algumas imagens foram ignoradas por não serem JPG ou PNG.");
+      toast.info("Algumas imagens foram ignoradas por nao serem JPG ou PNG.");
     }
 
     try {
@@ -644,7 +645,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       }
     } catch (err) {
       console.error("Erro ao enviar imagens:", err);
-      alert("Ocorreu um erro ao enviar a imagem. Tente novamente.");
+      toast.error("Ocorreu um erro ao enviar a imagem. Tente novamente.");
     } finally {
       e.target.value = "";
     }
@@ -664,7 +665,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     if (!validAudio) {
       console.warn("Arquivo selecionado não é um áudio suportado");
-      alert("Por enquanto só aceitamos áudios AAC, AMR, MP3, M4A ou OGG.");
+      toast.info("Por enquanto so aceitamos audios AAC, AMR, MP3, M4A ou OGG.");
       e.target.value = "";
       return;
     }
@@ -682,7 +683,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       });
     } catch (err) {
       console.error("Erro ao enviar áudio:", err);
-      alert("Não foi possível enviar o áudio.");
+      toast.error("Nao foi possivel enviar o audio.");
     } finally {
       e.target.value = "";
     }
@@ -703,8 +704,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     const validDocument = await validateDocumentFile(file);
 
     if (!validDocument) {
-      alert(
-        "Por enquanto só aceitamos documentos TXT, PDF, DOC, DOCX, XLS, XLSX, PPT ou PPTX.",
+      toast.info(
+        "Por enquanto so aceitamos documentos TXT, PDF, DOC, DOCX, XLS, XLSX, PPT ou PPTX.",
       );
       e.target.value = "";
       return;
@@ -728,7 +729,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       setMessage("");
     } catch (err) {
       console.error("Erro ao enviar documento:", err);
-      alert("Não foi possível enviar o documento.");
+      toast.error("Nao foi possivel enviar o documento.");
     } finally {
       e.target.value = "";
     }

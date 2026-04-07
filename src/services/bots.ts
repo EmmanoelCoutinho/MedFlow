@@ -18,8 +18,45 @@ type SupabaseResult<T> =
   | { data: T; error: null }
   | { data: null; error: Error };
 
-const asError = (error: unknown) =>
-  error instanceof Error ? error : new Error(String(error));
+type SupabaseLikeError = {
+  message?: string | null;
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+};
+
+const BOT_CHANNEL_BINDING_UNIQUE_CONSTRAINT =
+  "ux_bot_channel_bindings_one_active_per_channel";
+
+const getFriendlySupabaseErrorMessage = (error: SupabaseLikeError) => {
+  if (
+    error.code === "23505" &&
+    error.message?.includes(BOT_CHANNEL_BINDING_UNIQUE_CONSTRAINT)
+  ) {
+    return "Só pode ter um bot ativo por canal de comunicação.";
+  }
+
+  return error.message ?? null;
+};
+
+const isSupabaseLikeError = (error: unknown): error is SupabaseLikeError =>
+  typeof error === "object" && error !== null;
+
+const asError = (error: unknown) => {
+  if (error instanceof Error) return error;
+
+  if (isSupabaseLikeError(error)) {
+    const message =
+      getFriendlySupabaseErrorMessage(error) ??
+      error.details ??
+      error.hint ??
+      "Ocorreu um erro ao processar a operação.";
+
+    return new Error(message);
+  }
+
+  return new Error(String(error));
+};
 
 export const botsService = {
   async validateBotBeforePublish(

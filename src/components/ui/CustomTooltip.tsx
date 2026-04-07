@@ -27,29 +27,29 @@ function cn(...classes: Array<string | undefined | null | false>) {
 const variantClasses: Record<Variant, string> = {
   // Mais premium: escuro com glass, gradiente e ring sutil
   glass: cn(
-    "text-slate-100",
-    "bg-gradient-to-b from-slate-950/85 to-slate-900/70",
-    "border border-slate-700/40",
-    "shadow-xl shadow-black/30",
+    "text-slate-900",
+    "bg-white/95",
+    "border border-slate-200/80",
+    "shadow-xl shadow-black/10",
     "backdrop-blur-md",
-    "ring-1 ring-white/5",
+    "ring-1 ring-black/5",
   ),
 
   // “Unxet signature”: fundo escuro + borda com acento/shine + faixa lateral
   brand: cn(
-    "text-slate-100",
-    "bg-slate-950/80",
-    "border border-slate-700/40",
-    "shadow-xl shadow-black/30",
+    "text-slate-900",
+    "bg-white/95",
+    "border border-slate-200/80",
+    "shadow-xl shadow-black/10",
     "backdrop-blur-md",
-    "ring-1 ring-white/5",
+    "ring-1 ring-black/5",
   ),
 
   // Claro, mas ainda com personalidade
   light: cn(
     "text-slate-900",
-    "bg-white/90",
-    "border border-slate-200/70",
+    "bg-white/95",
+    "border border-slate-200/80",
     "shadow-xl shadow-black/10",
     "backdrop-blur-md",
     "ring-1 ring-black/5",
@@ -68,6 +68,8 @@ export function CustomTooltip({
   accentHex = "#0A84FF",
   contentClassName,
 }: Props) {
+  void accentHex;
+
   if (disabled) return <>{children}</>;
 
   return (
@@ -97,42 +99,9 @@ export function CustomTooltip({
             )}
           >
             {/* Faixa/acento “Unxet” */}
-            {variant === "brand" && (
-              <span
-                aria-hidden="true"
-                className="absolute left-2 top-2 bottom-2 w-[3px] rounded-full opacity-90"
-                style={{
-                  background: `linear-gradient(180deg, ${accentHex}, rgba(255,255,255,0))`,
-                }}
-              />
-            )}
+            <span className="relative block">{text}</span>
 
-            {/* Shine sutil */}
-            {variant !== "light" && (
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-2xl"
-                style={{
-                  background:
-                    "radial-gradient(600px 120px at 20% 0%, rgba(255,255,255,0.08), transparent 60%)",
-                }}
-              />
-            )}
-
-            <span
-              className={cn(
-                "relative block",
-                variant === "brand" ? "pl-3" : "",
-              )}
-            >
-              {text}
-            </span>
-
-            <Tooltip.Arrow
-              className={cn(
-                variant === "light" ? "fill-white/90" : "fill-slate-950/80",
-              )}
-            />
+            <Tooltip.Arrow className="fill-white/95" />
           </Tooltip.Content>
         </Tooltip.Portal>
       </Tooltip.Root>

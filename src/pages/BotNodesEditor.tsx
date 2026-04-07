@@ -49,6 +49,77 @@ const actionTypeToLabel: Record<string, string> = {
   end_flow: "Encerrar fluxo",
 };
 
+const normalizeOptionEndSession = (
+  option: Pick<BotOptionRow, "action_type" | "next_node_id" | "end_session">,
+) => {
+  if (option.next_node_id) return false;
+
+  switch (option.action_type) {
+    case "go_to_node":
+      return false;
+    case "transfer_to_department":
+    case "handoff_to_human":
+    case "end_flow":
+      return true;
+    case "send_message":
+    case "add_tag":
+    default:
+      return Boolean(option.end_session);
+  }
+};
+
+const getEndSessionControlState = (
+  option: Pick<BotOptionRow, "action_type" | "next_node_id">,
+) => {
+  if (option.next_node_id) {
+    return {
+      disabled: true,
+      helper:
+        "Desativado porque uma opcao com proxima etapa nao pode encerrar a sessao.",
+    };
+  }
+
+  switch (option.action_type) {
+    case "go_to_node":
+      return {
+        disabled: true,
+        helper:
+          "Desativado porque ir para a proxima etapa mantem o fluxo em andamento.",
+      };
+    case "transfer_to_department":
+      return {
+        disabled: true,
+        helper:
+          "Ativado automaticamente porque a transferencia para departamento encerra o bot.",
+      };
+    case "handoff_to_human":
+      return {
+        disabled: true,
+        helper:
+          "Ativado automaticamente porque a transferencia para atendente encerra o bot.",
+      };
+    case "end_flow":
+      return {
+        disabled: true,
+        helper:
+          "Ativado automaticamente porque esta acao foi definida para encerrar o fluxo.",
+      };
+    case "send_message":
+      return {
+        disabled: false,
+        helper:
+          "Opcional: use quando esta mensagem deve finalizar o bot apos o envio.",
+      };
+    case "add_tag":
+    default:
+      return {
+        disabled: false,
+        helper:
+          "Opcional: ative apenas quando adicionar a tag tambem deve encerrar o atendimento do bot.",
+      };
+  }
+};
+
 const NodeBadge = ({ node }: { node: BotNodeRow }) => {
   const isRoot = node.node_key === BOT_ROOT_NODE_KEY;
   return (
@@ -303,7 +374,11 @@ export const BotNodesEditor = ({
         const idKey =
           (opt as OptionDraft).__draftId ?? (opt as BotOptionRow).id;
         if (idKey !== optionKey) return opt;
-        return { ...opt, ...patch } as BotOptionRow | OptionDraft;
+        const nextOption = { ...opt, ...patch } as BotOptionRow | OptionDraft;
+        return {
+          ...nextOption,
+          end_session: normalizeOptionEndSession(nextOption),
+        } as BotOptionRow | OptionDraft;
       });
       return { ...prev, [nodeId]: next };
     });
@@ -367,7 +442,7 @@ export const BotNodesEditor = ({
         opt.action_type === "end_flow"
           ? opt.message_to_send?.trim() || null
           : null,
-      end_session: Boolean(opt.end_session),
+      end_session: normalizeOptionEndSession(opt),
       sort_order: opt.sort_order ?? 1,
     };
 
@@ -698,7 +773,7 @@ export const BotNodesEditor = ({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">
-                    Opcoes da etapa
+                    Opções da etapa
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
                     Configure as opções numeradas e suas ações.
@@ -753,6 +828,10 @@ export const BotNodesEditor = ({
                         opt.action_type === "send_message" ||
                         opt.action_type === "handoff_to_human" ||
                         opt.action_type === "end_flow";
+                      const normalizedEndSession =
+                        normalizeOptionEndSession(opt);
+                      const endSessionControl =
+                        getEndSessionControlState(opt);
 
                       return (
                         <div
@@ -918,14 +997,14 @@ export const BotNodesEditor = ({
 
                             <Toggle
                               label="Encerrar sessão"
-                              helper="Quando ativo, encerra a conversa apos esta opção."
-                              checked={Boolean(opt.end_session)}
+                              helper={endSessionControl.helper}
+                              checked={normalizedEndSession}
                               onChange={(checked) =>
                                 updateOptionLocal(selectedNode.id, optId, {
                                   end_session: checked,
                                 })
                               }
-                              disabled={!isAdmin}
+                              disabled={!isAdmin || endSessionControl.disabled}
                             />
                           </div>
 

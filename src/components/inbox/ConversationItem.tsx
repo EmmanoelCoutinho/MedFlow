@@ -6,6 +6,7 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { Conversation } from "../../types";
+import { CustomTooltip } from "../ui/CustomTooltip";
 interface ConversationItemProps {
   conversation: Conversation;
   onClick: () => void;
@@ -46,6 +47,9 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
     return CHANNEL_CONFIG[channel];
   };
   const channelInfo = getChannelInfo(conversation.channel);
+  const visibleTag = conversation.tags?.[0];
+  const hiddenTags = conversation.tags?.slice(1) ?? [];
+  const hiddenTagsCount = hiddenTags.length;
 
   const getTimeAgo = (timestamp: string) => {
     const diff = Date.now() - new Date(timestamp).getTime();
@@ -76,6 +80,22 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
     }
     return conversation.lastMessage;
   };
+
+  const renderTagPill = (tag: Conversation["tags"][number]) => {
+    if (!tag) return null;
+
+    return (
+      <span
+        key={tag.id}
+        title={tag.name}
+        className="inline-flex max-w-[120px] truncate rounded-full px-3 py-1 text-xs font-medium text-white select-none"
+        style={{ backgroundColor: tag.color ?? "#0A84FF" }}
+      >
+        {tag.name}
+      </span>
+    );
+  };
+
   return (
     <div
       onClick={onClick}
@@ -105,23 +125,29 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
           <p className="text-sm text-gray-600 truncate mb-2">
             {renderLastMessage()}
           </p>
-          <div className="flex items-center gap-2 flex-wrap relative">
+          <div className="flex items-center gap-2 min-w-0 relative pr-10">
             <span
-              className={`flex items-center gap-1 text-xs font-medium ${channelInfo.textColor}`}
+              className={`flex items-center gap-1 text-xs font-medium ${channelInfo.textColor} flex-shrink-0`}
             >
               {channelInfo.icon}
               {channelInfo.name}
             </span>
-            {conversation.tags?.map((tag) => (
-              <span
-                key={tag.id}
-                title={tag.name}
-                className="inline-flex rounded-full px-3 py-1 text-xs font-medium text-white select-none"
-                style={{ backgroundColor: tag.color ?? "#0A84FF" }}
+            {visibleTag ? renderTagPill(visibleTag) : null}
+            {hiddenTagsCount > 0 ? (
+              <CustomTooltip
+                side="top"
+                align="start"
+                text={
+                  <div className="flex max-w-[220px] flex-wrap gap-2">
+                    {hiddenTags.map((tag) => renderTagPill(tag))}
+                  </div>
+                }
               >
-                {tag.name}
-              </span>
-            ))}
+                <span className="inline-flex flex-shrink-0 cursor-default rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                  +{hiddenTagsCount}
+                </span>
+              </CustomTooltip>
+            ) : null}
 
             {conversation.unreadCount > 0 && (
               <span className="absolute right-0 bg-[#0A84FF] text-white text-xs px-2 py-0.5 rounded-full">

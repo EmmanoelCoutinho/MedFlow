@@ -320,7 +320,7 @@ export const BotSimulator = ({
 
         <Card className="p-6">
           <div className="text-sm font-semibold text-slate-900">
-            Opcoes da etapa
+            Opções da etapa
           </div>
           <div className="mt-1 text-xs text-slate-500">
             {currentNode

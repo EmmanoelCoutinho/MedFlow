@@ -731,7 +731,7 @@ export const AttendantsPage: React.FC = () => {
             <button
               type="button"
               onClick={handleOpenInvite}
-              className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+              className="inline-flex items-center gap-2 rounded-full bg-blue-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-400"
               disabled={!isAdmin}
             >
               + Convidar atendente
@@ -832,7 +832,7 @@ export const AttendantsPage: React.FC = () => {
           <div className="space-y-3">
             <div className="grid grid-cols-12 gap-4 px-5 text-xs font-semibold uppercase tracking-wide text-gray-400">
               <span className="col-span-3">Nome</span>
-              <span className="col-span-3">Email / ID</span>
+              <span className="col-span-3">Email</span>
               <span className="col-span-2">Role</span>
               <span className="col-span-2">Setor principal</span>
               <span className="col-span-1">Status</span>
@@ -852,13 +852,10 @@ export const AttendantsPage: React.FC = () => {
                     <p className="text-sm font-semibold text-gray-800">
                       {user.name?.trim() || "Sem nome"}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      {user.user_id.slice(0, 8)}…
-                    </p>
                   </div>
                   <div className="col-span-3">
                     <p className="text-sm text-gray-700">
-                      {user.email || user.user_id}
+                      {user.email || "---"}
                     </p>
                     {!user.email && (
                       <p className="text-xs text-gray-400">
@@ -1052,7 +1049,7 @@ export const AttendantsPage: React.FC = () => {
 
       <Modal
         title="Convidar atendente"
-        description="Envia um email para a pessoa criar a senha e acessar a clínica."
+        description="O usuário receberá um e-mail para criar a senha e acesar a plataforma"
         isOpen={activeModal === "invite"}
         onClose={handleCloseModal}
       >
@@ -1121,7 +1118,7 @@ export const AttendantsPage: React.FC = () => {
               type="button"
               onClick={handleInvite}
               disabled={!isAdmin || isInviting}
-              className="rounded-full bg-gray-900 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+              className="rounded-full bg-blue-500 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               {isInviting ? "Enviando..." : "Enviar convite"}
             </button>

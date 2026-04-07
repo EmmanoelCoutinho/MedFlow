@@ -6,6 +6,21 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 import logo from '../assets/logo-unxet.png';
+import { toast } from 'react-toastify';
+
+const translateLoginError = (error: { code?: string; message?: string }) => {
+  const message = error.message?.trim() ?? '';
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    error.code === 'invalid_credentials' ||
+    lowerMessage === 'invalid login credentials'
+  ) {
+    return 'E-mail ou senha inválidos.';
+  }
+
+  return message || 'Não foi possível entrar. Tente novamente.';
+};
 
 export const Login: React.FC = () => {
   const { signInWithEmail, loading, authUser } = useAuth();
@@ -22,7 +37,7 @@ export const Login: React.FC = () => {
     if (!error) {
       navigate('/inbox');
     } else {
-      alert('Erro ao entrar: ' + error.message);
+      toast.error('Erro ao entrar: ' + translateLoginError(error));
     }
   }
 

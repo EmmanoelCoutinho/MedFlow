@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { Conversation, Channel, Tag } from "../types";
 import { useAuth } from "../contexts/AuthContext";
@@ -630,11 +630,30 @@ export function useConversations(options: UseConversationsOptions = {}) {
     [authUser, scheduleRefetchStable],
   );
 
+  const totalUnreadCount = useMemo(() => {
+    return conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+  }, [conversations]);
+
+  const totalUnreadOpen = useMemo(() => {
+    return conversations
+      .filter((conv) => conv.status === "open")
+      .reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+  }, [conversations]);
+
+  const totalUnreadPending = useMemo(() => {
+    return conversations
+      .filter((conv) => conv.status === "pending")
+      .reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+  }, [conversations]);
+
   return {
     conversations,
     loading,
     refreshing,
     error,
+    totalUnreadCount,
+    totalUnreadOpen,
+    totalUnreadPending,
     refetch: () => fetchConversations({ reason: "refetch" }),
     markAsRead,
   };

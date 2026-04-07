@@ -189,9 +189,11 @@ const KpiCard = ({
   <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
     <div className="flex items-start justify-between gap-2">
       <p className="text-sm text-slate-500">{label}</p>
-      {hint ? <span className="text-xs text-slate-400">{hint}</span> : null}
+      {/* {hint ? <span className="text-xs text-slate-400">{hint}</span> : null} */}
     </div>
-    <p className="mt-3 text-2xl font-semibold text-slate-900">{value}</p>
+    <p className="mt-3 text-3xl font-semibold text-slate-900 text-center">
+      {value}
+    </p>
   </article>
 );
 

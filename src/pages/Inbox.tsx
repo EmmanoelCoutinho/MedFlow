@@ -29,7 +29,26 @@ export const Inbox: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { conversations, loading: isLoading, markAsRead } = useConversations();
+  const {
+    conversations,
+    loading: isLoading,
+    markAsRead,
+    totalUnreadCount,
+    totalUnreadOpen,
+    totalUnreadPending,
+  } = useConversations();
+
+  useEffect(() => {
+    const baseTitle = "Unxet";
+    document.title =
+      totalUnreadCount > 0
+        ? `(${totalUnreadCount}) ${baseTitle}`
+        : baseTitle;
+
+    return () => {
+      document.title = baseTitle;
+    };
+  }, [totalUnreadCount]);
 
   const [tab, setTab] = useState<InboxTab>("open");
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,13 +70,6 @@ export const Inbox: React.FC = () => {
   const visibleConversations = useMemo(() => {
     return conversations.filter((c) => c.status !== "closed");
   }, [conversations]);
-
-  const unreadCount = useMemo(() => {
-    return visibleConversations.reduce(
-      (sum, conv) => sum + (conv.unreadCount || 0),
-      0,
-    );
-  }, [visibleConversations]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -89,20 +101,6 @@ export const Inbox: React.FC = () => {
   }, [filtered]);
 
   const currentList = tab === "open" ? openConversations : pendingConversations;
-
-  const unreadOpen = useMemo(() => {
-    return openConversations.reduce(
-      (sum, conv) => sum + (conv.unreadCount || 0),
-      0,
-    );
-  }, [openConversations]);
-
-  const unreadPending = useMemo(() => {
-    return pendingConversations.reduce(
-      (sum, conv) => sum + (conv.unreadCount || 0),
-      0,
-    );
-  }, [pendingConversations]);
 
   const sidebarItems = [
     {
@@ -208,8 +206,8 @@ export const Inbox: React.FC = () => {
         <div className="p-4 border-b shrink-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Conversas</h2>
-            {unreadCount > 0 && (
-              <Badge variant="warning">{unreadCount} não lidas</Badge>
+            {totalUnreadCount > 0 && (
+              <Badge variant="warning">{totalUnreadCount} não lidas</Badge>
             )}
           </div>
 
@@ -246,9 +244,9 @@ export const Inbox: React.FC = () => {
                 <span className="text-xs opacity-90">
                   ({openConversations.length})
                 </span>
-                {unreadOpen > 0 && (
+                {totalUnreadOpen > 0 && (
                   <span className="ml-1 text-xs bg-white/15 px-2 py-0.5 rounded-full">
-                    {unreadOpen}
+                    {totalUnreadOpen}
                   </span>
                 )}
               </span>
@@ -269,9 +267,9 @@ export const Inbox: React.FC = () => {
                 <span className="text-xs opacity-90">
                   ({pendingConversations.length})
                 </span>
-                {unreadPending > 0 && (
+                {totalUnreadPending > 0 && (
                   <span className="ml-1 text-xs bg-white/15 px-2 py-0.5 rounded-full">
-                    {unreadPending}
+                    {totalUnreadPending}
                   </span>
                 )}
               </span>

@@ -9,12 +9,12 @@ type SettingsTabItem = {
 
 const SETTINGS_TABS: SettingsTabItem[] = [
   {
-    label: "Automacoes de conversa",
+    label: "Automações de conversa",
     path: "/inbox/settings/automations/conversations",
     isActive: (pathname) => pathname.startsWith("/inbox/settings/automations"),
   },
   {
-    label: "Integracoes",
+    label: "Integrações",
     path: "/inbox/settings/integrations/meta",
     isActive: (pathname) => pathname.startsWith("/inbox/settings/integrations"),
   },
