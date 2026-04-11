@@ -44,6 +44,14 @@ const getEventText = (event: ConversationEvent) => {
     case "conversation_reopened":
       return `${actor} reabriu a conversa`;
 
+    case "reopened_automatically": {
+      const reason = meta.reason;
+      if (reason === "incoming_message") {
+        return "Sistema reabriu a conversa automaticamente por nova mensagem do cliente";
+      }
+      return "Sistema reabriu a conversa automaticamente";
+    }
+
     case "closed_automatically": {
       const reason = meta.reason;
       if (reason === "window_expired") {
@@ -52,8 +60,31 @@ const getEventText = (event: ConversationEvent) => {
       return "Sistema fechou a conversa automaticamente";
     }
 
+    case "returned_to_pending_automatically":
+      return "Sistema retornou a conversa automaticamente para pendente";
+
+    case "sla_first_response_breached":
+      return "Sistema registrou violação do SLA da primeira resposta";
+
+    case "conversation_transferred": {
+      const toDepartment =
+        meta.to_department_name ?? meta.department_name ?? meta.to_sector_name;
+      const toUser = meta.to_user_name ?? meta.assigned_user_name;
+
+      if (toUser) {
+        return `${actor} atribuiu a conversa para ${toUser}`;
+      }
+
+      if (toDepartment) {
+        return `${actor} transferiu a conversa para ${toDepartment}`;
+      }
+
+      return `${actor} transferiu a conversa`;
+    }
+
     case "sector_transferred": {
-      const toSector = meta.to_department_name ?? "outro setor";
+      const toSector =
+        meta.to_department_name ?? meta.to_sector_name ?? "outro setor";
       return `${actor} transferiu para ${toSector}`;
     }
 
@@ -103,6 +134,22 @@ const getEventText = (event: ConversationEvent) => {
 
     case "bot_handoff_requested":
       return "Cliente solicitou atendimento humano";
+
+    case "bot_handoff_to_human": {
+      const toDepartment = meta.to_department_name;
+      if (toDepartment) {
+        return `Bot encaminhou a conversa para atendimento humano em ${toDepartment}`;
+      }
+      return "Bot encaminhou a conversa para atendimento humano";
+    }
+
+    case "bot_message_sent": {
+      const botName = meta.bot_name;
+      if (botName) {
+        return `Bot ${botName} enviou uma mensagem automática`;
+      }
+      return "Bot enviou uma mensagem automática";
+    }
 
     case "bot_session_ended": {
       const reason = meta.reason;
