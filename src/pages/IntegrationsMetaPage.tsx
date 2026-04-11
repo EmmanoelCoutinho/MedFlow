@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
-  Settings2Icon,
   ExternalLinkIcon,
   FacebookIcon,
   InstagramIcon,
@@ -251,6 +250,7 @@ export const MetaIntegrationsPage: React.FC = () => {
         <div className="mt-4">
           <Button
             variant="primary"
+            className="bg-blue-600"
             size="sm"
             onClick={onAction}
             disabled={actionDisabled}
@@ -279,25 +279,10 @@ export const MetaIntegrationsPage: React.FC = () => {
             </p>
             <SettingsTabs />
           </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              className="bg-blue-600"
-              onClick={startMetaOAuth}
-              disabled={!clinicId}
-            >
-              <span className="flex items-center gap-2">
-                <ExternalLinkIcon className="h-4 w-4" />
-                Conectar Meta
-              </span>
-            </Button>
-          </div>
         </div>
       </div>
 
-      <div className="space-y-6 px-6 py-6 bg-red-500 flex flex-col pb-56">
+      <div className="space-y-6 px-6 py-6 flex flex-col pb-56">
         {errorMsg ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMsg}
@@ -325,11 +310,6 @@ export const MetaIntegrationsPage: React.FC = () => {
                     Empresa vinculada: {clinicLabel}
                   </p>
                 </div>
-
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Settings2Icon className="h-4 w-4" />
-                  <span>Configuração</span>
-                </div>
               </div>
 
               <div className="mt-6 grid gap-3">
@@ -356,16 +336,11 @@ export const MetaIntegrationsPage: React.FC = () => {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">
-                    Meta (Instagram e Facebook)
+                    Instagram e Facebook
                   </h2>
                   <p className="text-sm text-gray-500">
                     Empresa vinculada: {clinicLabel}
                   </p>
-                </div>
-
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Settings2Icon className="h-4 w-4" />
-                  <span>Configuração</span>
                 </div>
               </div>
 
@@ -393,6 +368,21 @@ export const MetaIntegrationsPage: React.FC = () => {
                     "Manter o canal disponivel para operação e automações.",
                   ]}
                 />
+              </div>
+
+              <div className="flex items-center gap-2 mt-6">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="bg-blue-600"
+                  onClick={startMetaOAuth}
+                  disabled={!clinicId}
+                >
+                  <span className="flex items-center gap-2">
+                    <ExternalLinkIcon className="h-4 w-4" />
+                    Conectar Instagram e Facebook
+                  </span>
+                </Button>
               </div>
 
               <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
