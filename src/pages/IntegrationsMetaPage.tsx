@@ -6,6 +6,7 @@ import {
   ExternalLinkIcon,
   FacebookIcon,
   InstagramIcon,
+  MessageCircleIcon,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -14,13 +15,21 @@ import { supabase } from "../lib/supabaseClient";
 import { SettingsTabs } from "../components/settings/SettingsTabs";
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string | undefined;
+const META_APP_WABA_ID = import.meta.env.VITE_META_APP_WABA_ID as
+  | string
+  | undefined;
+const META_WA_CONFIG_ID = import.meta.env.VITE_META_WA_CONFIG_ID as
+  | string
+  | undefined;
 const META_REDIRECT_URI = import.meta.env.VITE_META_REDIRECT_URI as
   | string
   | undefined;
 
 type Connection = {
   id: string;
-  channel: "messenger" | "instagram";
+  channel: "messenger" | "instagram" | "whatsapp";
+  meta_waba_id: string | null;
+  meta_phone_number_id: string | null;
   meta_page_id: string | null;
   meta_ig_user_id: string | null;
   status: "connected" | "disconnected" | "needs_reauth";
@@ -38,6 +47,9 @@ type PlatformCardProps = {
   status?: Connection["status"] | null;
   icon: React.ReactNode;
   accessItems: string[];
+  actionLabel?: string;
+  onAction?: () => void;
+  actionDisabled?: boolean;
 };
 
 export const MetaIntegrationsPage: React.FC = () => {
@@ -45,7 +57,6 @@ export const MetaIntegrationsPage: React.FC = () => {
   const clinicId = profile?.clinic_id ?? null;
 
   const [clinicName, setClinicName] = useState<string>("");
-
   const [connections, setConnections] = useState<Connection[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -65,7 +76,12 @@ export const MetaIntegrationsPage: React.FC = () => {
     [connections],
   );
 
-  const startOAuth = useCallback(() => {
+  const whatsapp = useMemo(
+    () => connections.find((c) => c.channel === "whatsapp") ?? null,
+    [connections],
+  );
+
+  const startMetaOAuth = useCallback(() => {
     if (!clinicId) return;
 
     if (!META_APP_ID || !META_REDIRECT_URI) {
@@ -76,8 +92,6 @@ export const MetaIntegrationsPage: React.FC = () => {
     }
 
     const state = `${clinicId}|fb`;
-    const redirectUri = META_REDIRECT_URI;
-
     const scopes = [
       "public_profile",
       "pages_show_list",
@@ -92,12 +106,35 @@ export const MetaIntegrationsPage: React.FC = () => {
     const url =
       `https://www.facebook.com/v21.0/dialog/oauth` +
       `?client_id=${encodeURIComponent(META_APP_ID)}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&redirect_uri=${encodeURIComponent(META_REDIRECT_URI)}` +
       `&state=${encodeURIComponent(state)}` +
       `&response_type=code` +
       `&auth_type=rerequest` +
       `&prompt=consent` +
       `&scope=${encodeURIComponent(scopes)}`;
+
+    window.location.href = url;
+  }, [clinicId]);
+
+  const startWhatsAppOAuth = useCallback(() => {
+    if (!clinicId) return;
+
+    if (!META_APP_WABA_ID || !META_REDIRECT_URI || !META_WA_CONFIG_ID) {
+      setErrorMsg(
+        "Configuração Meta ausente (App ID / Redirect URI / Config ID).",
+      );
+      return;
+    }
+
+    const state = `${clinicId}|wa`;
+
+    const url =
+      `https://www.facebook.com/v21.0/dialog/oauth` +
+      `?client_id=${encodeURIComponent(META_APP_WABA_ID)}` +
+      `&redirect_uri=${encodeURIComponent(META_REDIRECT_URI)}` +
+      `&state=${encodeURIComponent(state)}` +
+      `&response_type=code` +
+      `&config_id=${encodeURIComponent(META_WA_CONFIG_ID)}`;
 
     window.location.href = url;
   }, [clinicId]);
@@ -127,10 +164,12 @@ export const MetaIntegrationsPage: React.FC = () => {
 
     const { data, error } = await supabase
       .from("channel_connections")
-      .select("id,channel,meta_page_id,meta_ig_user_id,status,updated_at")
+      .select(
+        "id,channel,meta_waba_id,meta_phone_number_id,meta_page_id,meta_ig_user_id,status,updated_at",
+      )
       .eq("provider", "meta")
       .eq("clinic_id", clinicId)
-      .in("channel", ["messenger", "instagram"])
+      .in("channel", ["messenger", "instagram", "whatsapp"])
       .order("updated_at", { ascending: false });
 
     if (error) {
@@ -176,6 +215,9 @@ export const MetaIntegrationsPage: React.FC = () => {
     status,
     icon,
     accessItems,
+    actionLabel,
+    onAction,
+    actionDisabled,
   }) => (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
@@ -204,6 +246,22 @@ export const MetaIntegrationsPage: React.FC = () => {
           ))}
         </ul>
       </div>
+
+      {actionLabel && onAction ? (
+        <div className="mt-4">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={onAction}
+            disabled={actionDisabled}
+          >
+            <span className="flex items-center gap-2">
+              <ExternalLinkIcon className="h-4 w-4" />
+              {actionLabel}
+            </span>
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -216,7 +274,8 @@ export const MetaIntegrationsPage: React.FC = () => {
               Integrações
             </h1>
             <p className="text-sm text-gray-500">
-              Conecte sua Página do Facebook para ativar Messenger e Instagram.
+              Conecte seus canais da Meta para ativar Messenger, Instagram e
+              WhatsApp.
             </p>
             <SettingsTabs />
           </div>
@@ -226,7 +285,7 @@ export const MetaIntegrationsPage: React.FC = () => {
               variant="primary"
               size="sm"
               className="bg-blue-600"
-              onClick={startOAuth}
+              onClick={startMetaOAuth}
               disabled={!clinicId}
             >
               <span className="flex items-center gap-2">
@@ -238,7 +297,7 @@ export const MetaIntegrationsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="space-y-6 px-6 py-6">
+      <div className="space-y-6 px-6 py-6 bg-red-500 flex flex-col pb-56">
         {errorMsg ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMsg}
@@ -255,56 +314,95 @@ export const MetaIntegrationsPage: React.FC = () => {
             </p>
           </Card>
         ) : (
-          <Card className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Meta (Instagram e Facebook)
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Empresa vinculada: {clinicLabel}
-                </p>
+          <>
+            <Card className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Meta WhatsApp
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Empresa vinculada: {clinicLabel}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Settings2Icon className="h-4 w-4" />
+                  <span>Configuração</span>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Settings2Icon className="h-4 w-4" />
-                <span>Configuração</span>
+              <div className="mt-6 grid gap-3">
+                <PlatformCard
+                  title="WhatsApp"
+                  description="Mensagens do número conectado via Meta"
+                  status={whatsapp?.status}
+                  icon={
+                    <MessageCircleIcon className="h-5 w-5 text-green-600" />
+                  }
+                  accessItems={[
+                    "Receber e responder mensagens do WhatsApp conectado.",
+                    "Centralizar o atendimento do WhatsApp na inbox.",
+                    "Disponibilizar o canal para operação e automações.",
+                  ]}
+                  actionLabel="Conectar WhatsApp"
+                  onAction={startWhatsAppOAuth}
+                  actionDisabled={!clinicId}
+                />
               </div>
-            </div>
+            </Card>
 
-            <div className="mt-6 grid gap-3 md:grid-cols-2">
-              <PlatformCard
-                title="Messenger"
-                description="Mensagens da Página do Facebook"
-                status={messenger?.status}
-                icon={<FacebookIcon className="h-5 w-5 text-blue-600" />}
-                accessItems={[
-                  "Receber e responder mensagens da Página conectada.",
-                  "Centralizar o atendimento do Facebook na inbox.",
-                  "Sincronizar conversas recebidas pelo Facebook.",
-                ]}
-              />
+            <Card className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Meta (Instagram e Facebook)
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Empresa vinculada: {clinicLabel}
+                  </p>
+                </div>
 
-              <PlatformCard
-                title="Instagram"
-                description="DMs do Instagram vinculado a Página"
-                status={instagram?.status}
-                icon={<InstagramIcon className="h-5 w-5 text-pink-600" />}
-                accessItems={[
-                  "Receber e responder mensagens diretas do Instagram.",
-                  "Centralizar o atendimento do Instagram na inbox.",
-                  "Manter o canal disponivel para operação e automações.",
-                ]}
-              />
-            </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Settings2Icon className="h-4 w-4" />
+                  <span>Configuração</span>
+                </div>
+              </div>
 
-            <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
-              <span className="font-medium">Importante:</span> Para realizar a
-              conexão com o Instagram, é necessário que a conta esteja
-              configurada como conta profissional e vinculada a uma página do
-              Facebook.
-            </div>
-          </Card>
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
+                <PlatformCard
+                  title="Messenger"
+                  description="Mensagens da Página do Facebook"
+                  status={messenger?.status}
+                  icon={<FacebookIcon className="h-5 w-5 text-blue-600" />}
+                  accessItems={[
+                    "Receber e responder mensagens da Página conectada.",
+                    "Centralizar o atendimento do Facebook na inbox.",
+                    "Sincronizar conversas recebidas pelo Facebook.",
+                  ]}
+                />
+
+                <PlatformCard
+                  title="Instagram"
+                  description="DMs do Instagram vinculado a Página"
+                  status={instagram?.status}
+                  icon={<InstagramIcon className="h-5 w-5 text-pink-600" />}
+                  accessItems={[
+                    "Receber e responder mensagens diretas do Instagram.",
+                    "Centralizar o atendimento do Instagram na inbox.",
+                    "Manter o canal disponivel para operação e automações.",
+                  ]}
+                />
+              </div>
+
+              <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                <span className="font-medium">Importante:</span> Para realizar a
+                conexão com o Instagram, é necessário que a conta esteja
+                configurada como conta profissional e vinculada a uma página do
+                Facebook.
+              </div>
+            </Card>
+          </>
         )}
       </div>
     </div>

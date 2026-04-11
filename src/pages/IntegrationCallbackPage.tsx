@@ -6,6 +6,13 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 
 type PageItem = { id: string; name: string; access_token?: string };
+type IntegrationFlow = "meta" | "whatsapp";
+
+const parseIntegrationState = (rawState: string) => {
+  const [clinicId = "", flowMarker = "fb"] = rawState.split("|");
+  const flow: IntegrationFlow = flowMarker === "wa" ? "whatsapp" : "meta";
+  return { clinicId, flow };
+};
 
 export function MetaCallbackPage() {
   const { profile } = useAuth();
@@ -25,7 +32,8 @@ export function MetaCallbackPage() {
   );
 
   const code = params.get("code") ?? "";
-  const stateClinicId = params.get("state") ?? "";
+  const rawState = params.get("state") ?? "";
+  const { clinicId: stateClinicId, flow } = parseIntegrationState(rawState);
   const clinicId = profile?.clinic_id ?? stateClinicId;
 
   const goBack = () => navigate("/inbox/settings/integrations/meta");
@@ -44,6 +52,24 @@ export function MetaCallbackPage() {
       if (!code) {
         setError("code ausente no callback.");
         setLoading(false);
+        return;
+      }
+
+      if (flow === "whatsapp") {
+        const { error: fnErr } = await supabase.functions.invoke(
+          "whatsapp-connect",
+          {
+            body: { clinicId, code },
+          },
+        );
+
+        if (fnErr) {
+          setError("Erro ao conectar o WhatsApp.");
+          setLoading(false);
+          return;
+        }
+
+        navigate("/inbox/settings/integrations/meta");
         return;
       }
 
@@ -82,7 +108,7 @@ export function MetaCallbackPage() {
           });
 
           if (res.error) {
-            setError("Erro ao conectar a Página.");
+            setError("Erro ao conectar a Pagina.");
             setLoading(false);
             return;
           }
@@ -100,7 +126,7 @@ export function MetaCallbackPage() {
     };
 
     run();
-  }, [clinicId, code, navigate]);
+  }, [clinicId, code, flow, navigate]);
 
   const connectSelected = async () => {
     setLoading(true);
@@ -113,13 +139,13 @@ export function MetaCallbackPage() {
     }
 
     if (!selectedPageId) {
-      setError("Selecione uma Página.");
+      setError("Selecione uma Pagina.");
       setLoading(false);
       return;
     }
 
     if (!userAccessToken) {
-      setError("Token de usuário ausente.");
+      setError("Token de usuario ausente.");
       setLoading(false);
       return;
     }
@@ -134,7 +160,7 @@ export function MetaCallbackPage() {
     });
 
     if (fnErr) {
-      setError("Erro ao conectar a Página.");
+      setError("Erro ao conectar a Pagina.");
       setLoading(false);
       return;
     }
@@ -143,12 +169,16 @@ export function MetaCallbackPage() {
   };
 
   return (
-    <div className="p-6 max-w-xl">
-      <h1 className="text-xl font-semibold">Conectando Meta</h1>
+    <div className="max-w-xl p-6">
+      <h1 className="text-xl font-semibold">
+        {flow === "whatsapp" ? "Conectando WhatsApp" : "Conectando Meta"}
+      </h1>
 
       {loading && (
         <div className="mt-4 text-sm text-gray-600">
-          Processando autorização...
+          {flow === "whatsapp"
+            ? "Finalizando conexao do WhatsApp..."
+            : "Processando autorizacao..."}
         </div>
       )}
 
@@ -158,10 +188,10 @@ export function MetaCallbackPage() {
         </div>
       )}
 
-      {!loading && needsSelection && (
+      {!loading && flow === "meta" && needsSelection && (
         <div className="mt-6 rounded-lg border p-4">
           <div className="text-sm text-gray-700">
-            Escolha a Página do Facebook da sua empresa.
+            Escolha a Pagina do Facebook da sua empresa.
           </div>
 
           <select
@@ -179,14 +209,14 @@ export function MetaCallbackPage() {
           <div className="mt-4 flex gap-2">
             <button
               onClick={connectSelected}
-              className="px-4 py-2 rounded-md bg-black text-white text-sm hover:opacity-90"
+              className="rounded-md bg-black px-4 py-2 text-sm text-white hover:opacity-90"
               disabled={loading}
             >
               Conectar
             </button>
             <button
               onClick={goBack}
-              className="px-4 py-2 rounded-md border text-sm hover:bg-gray-50"
+              className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50"
               disabled={loading}
             >
               Cancelar
@@ -196,7 +226,9 @@ export function MetaCallbackPage() {
       )}
 
       {!loading && !needsSelection && !error && (
-        <div className="mt-4 text-sm text-gray-600">Finalizando...</div>
+        <div className="mt-4 text-sm text-gray-600">
+          {flow === "whatsapp" ? "Conexao concluida." : "Finalizando..."}
+        </div>
       )}
     </div>
   );
