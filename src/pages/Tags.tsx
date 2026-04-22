@@ -1,12 +1,12 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
-import { PlusCircleIcon, PencilIcon, TrashIcon } from "lucide-react";
+import { PlusCircleIcon, PencilIcon, TrashIcon, TagIcon } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import * as Dialog from "@radix-ui/react-dialog";
-
+import PreTitleIcon from "../components/ui/PreTitleIcon";
 
 type TagItem = {
   id: string;
@@ -199,7 +199,7 @@ export const Tags: React.FC = () => {
     // Se não veio nada, não deletou (0 rows affected)
     if (!data?.id) {
       throw new Error(
-        "Não foi possível excluir a tag (nenhuma linha encontrada). Verifique permissões (RLS) e clinic_id."
+        "Não foi possível excluir a tag (nenhuma linha encontrada). Verifique permissões (RLS) e clinic_id.",
       );
     }
 
@@ -207,28 +207,27 @@ export const Tags: React.FC = () => {
   };
 
   const handleDeleteClick = () => {
-  if (!isEditing) return;
-  setIsDeleteDialogOpen(true);
-};
+    if (!isEditing) return;
+    setIsDeleteDialogOpen(true);
+  };
 
-const handleConfirmDelete = async () => {
-  if (!isEditing || !editingId) return;
+  const handleConfirmDelete = async () => {
+    if (!isEditing || !editingId) return;
 
-  setIsDeleting(true);
-  setErrorMsg(null);
+    setIsDeleting(true);
+    setErrorMsg(null);
 
-  try {
-    await deleteTag();
-    setIsDeleteDialogOpen(false);
-    setActiveTab("list");
-    resetForm();
-  } catch (err: any) {
-    setErrorMsg(err?.message ?? "Erro ao excluir tag.");
-  } finally {
-    setIsDeleting(false);
-  }
-};
-
+    try {
+      await deleteTag();
+      setIsDeleteDialogOpen(false);
+      setActiveTab("list");
+      resetForm();
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? "Erro ao excluir tag.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -253,7 +252,8 @@ const handleConfirmDelete = async () => {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50">
       <div className="px-6 py-5 border-b bg-white">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <PreTitleIcon icon={TagIcon} />
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Etiquetas</h1>
             <p className="text-sm text-gray-500">
@@ -309,10 +309,13 @@ const handleConfirmDelete = async () => {
             </div>
 
             {isLoading ? (
-              <div className="text-sm text-gray-500">Carregando etiquetas...</div>
+              <div className="text-sm text-gray-500">
+                Carregando etiquetas...
+              </div>
             ) : tags.length === 0 ? (
               <div className="text-sm text-gray-500">
-                Nenhuma etiqueta cadastrada para esta empresa, todas as suas etiquetas apareceram aqui.
+                Nenhuma etiqueta cadastrada para esta empresa, todas as suas
+                etiquetas apareceram aqui.
               </div>
             ) : (
               <div className="space-y-3">
@@ -358,7 +361,8 @@ const handleConfirmDelete = async () => {
                   {isEditing ? "Editar etiqueta" : "Criar nova etiqueta"}
                 </h2>
                 <p className="text-sm text-gray-500">
-                  Defina um nome e escolha uma cor personalizada para a etiqueta.
+                  Defina um nome e escolha uma cor personalizada para a
+                  etiqueta.
                 </p>
               </div>
 
@@ -400,8 +404,8 @@ const handleConfirmDelete = async () => {
                   </Dialog.Title>
 
                   <Dialog.Description className="mt-2 text-sm text-gray-600">
-                    Tem certeza que deseja excluir esta Etiqueta? Essa ação não pode
-                    ser desfeita.
+                    Tem certeza que deseja excluir esta Etiqueta? Essa ação não
+                    pode ser desfeita.
                   </Dialog.Description>
 
                   <div className="mt-6 flex items-center justify-end gap-3">
@@ -510,8 +514,8 @@ const handleConfirmDelete = async () => {
                   {isSaving
                     ? "Salvando..."
                     : isEditing
-                    ? "Salvar alterações"
-                    : "Criar etiqueta"}
+                      ? "Salvar alterações"
+                      : "Criar etiqueta"}
                 </Button>
 
                 <Button

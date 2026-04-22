@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  BotIcon,
   CopyIcon,
   PencilIcon,
   PlusIcon,
@@ -17,6 +18,7 @@ import { useClinic } from "../contexts/ClinicContext";
 import { botsService } from "../services/bots";
 import type { BotRow } from "../types/bots";
 import { supabase } from "../lib/supabaseClient";
+import PreTitleIcon from "../components/ui/PreTitleIcon";
 
 type PublishedFilter = "all" | "published" | "draft";
 
@@ -43,6 +45,9 @@ const PublishedBadge = ({ published }: { published: boolean }) => {
     </Badge>
   );
 };
+
+const getActiveBotConflictMessage = (activeBotName: string) =>
+  `Não foi possível ativar este bot porque o bot "${activeBotName}" já está ativo. Se quiser ativar este, desative o bot que já está ativo primeiro.`;
 
 export const BotsSettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -167,8 +172,25 @@ export const BotsSettingsPage: React.FC = () => {
 
   const handleToggleStatus = async (bot: BotRow) => {
     if (!clinicId) return;
-    setActionLoadingId(bot.id);
     const nextStatus = bot.status === "active" ? "inactive" : "active";
+
+    if (nextStatus === "active") {
+      const activeBotRes = await botsService.findAnotherActiveBot(
+        clinicId,
+        bot.id,
+      );
+      if (activeBotRes.error) {
+        toast.error(activeBotRes.error.message);
+        return;
+      }
+
+      if (activeBotRes.data) {
+        toast.error(getActiveBotConflictMessage(activeBotRes.data.name));
+        return;
+      }
+    }
+
+    setActionLoadingId(bot.id);
     setBotUpdating(bot.id, { status: nextStatus });
     const res = await botsService.updateBot(clinicId, bot.id, {
       status: nextStatus,
@@ -217,11 +239,15 @@ export const BotsSettingsPage: React.FC = () => {
     <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50">
       <div className="px-6 py-5 border-b bg-white">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Bots</h1>
-            <p className="text-sm text-gray-500">
-              Configure fluxos de triagem e vincule bots aos canais da clínica.
-            </p>
+          <div className="flex items-center gap-3">
+            <PreTitleIcon icon={BotIcon} />
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">Bots</h1>
+              <p className="text-sm text-gray-500">
+                Configure fluxos de triagem e vincule bots aos canais da
+                clínica.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

@@ -11,6 +11,7 @@ import { Badge } from "../components/ui/Badge";
 import { supabase } from "../lib/supabaseClient";
 import { useClinic } from "../contexts/ClinicContext";
 import { toast } from "react-toastify";
+import PreTitleIcon from "../components/ui/PreTitleIcon";
 
 type Role = "admin" | "agent";
 
@@ -178,7 +179,7 @@ const getFunctionResponseMessage = async (error: any) => {
 
 const RoleBadge: React.FC<{ role: Role }> = ({ role }) => (
   <Badge variant={role === "admin" ? "success" : "default"}>
-    {role === "admin" ? "Admin" : "Atendente"}
+    {role === "admin" ? "Administrador" : "Atendente"}
   </Badge>
 );
 
@@ -714,9 +715,7 @@ export const AttendantsPage: React.FC = () => {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
-                <UsersIcon className="h-5 w-5 text-blue-600" />
-              </div>
+              <PreTitleIcon icon={UsersIcon} />
               <div>
                 <h1 className="text-2xl font-semibold text-gray-900">
                   Atendentes
@@ -757,7 +756,7 @@ export const AttendantsPage: React.FC = () => {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <label className="text-xs font-medium text-gray-500">
-                Role
+                Cargo
                 <div className="relative mt-1">
                   <select
                     value={roleFilter}
@@ -833,7 +832,7 @@ export const AttendantsPage: React.FC = () => {
             <div className="grid grid-cols-12 gap-4 px-5 text-xs font-semibold uppercase tracking-wide text-gray-400">
               <span className="col-span-3">Nome</span>
               <span className="col-span-3">Email</span>
-              <span className="col-span-2">Role</span>
+              <span className="col-span-2">Cargo</span>
               <span className="col-span-2">Setor principal</span>
               <span className="col-span-1">Status</span>
               <span className="col-span-1 text-right">Ações</span>
@@ -859,7 +858,7 @@ export const AttendantsPage: React.FC = () => {
                     </p>
                     {!user.email && (
                       <p className="text-xs text-gray-400">
-                        Email não disponível no client.
+                        Email não disponível.
                       </p>
                     )}
                   </div>
@@ -910,7 +909,7 @@ export const AttendantsPage: React.FC = () => {
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
               <label className="text-sm font-medium text-gray-700">
-                Role
+                Cargo
                 <select
                   value={editRole}
                   onChange={(e) => handleRoleChange(e.target.value as Role)}
@@ -1049,7 +1048,7 @@ export const AttendantsPage: React.FC = () => {
 
       <Modal
         title="Convidar atendente"
-        description="O usuário receberá um e-mail para criar a senha e acesar a plataforma"
+        description="O usuário receberá um e-mail para criar a senha e acessar a plataforma"
         isOpen={activeModal === "invite"}
         onClose={handleCloseModal}
       >
@@ -1066,7 +1065,7 @@ export const AttendantsPage: React.FC = () => {
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="text-sm font-medium text-gray-700">
-              Nome (opcional)
+              Nome
               <Input
                 value={inviteName}
                 onChange={(e) => setInviteName(e.target.value)}
@@ -1076,7 +1075,7 @@ export const AttendantsPage: React.FC = () => {
             </label>
 
             <label className="text-sm font-medium text-gray-700">
-              Role
+              Cargo
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as Role)}
@@ -1089,22 +1088,24 @@ export const AttendantsPage: React.FC = () => {
             </label>
           </div>
 
-          <label className="text-sm font-medium text-gray-700">
-            Setor principal (opcional)
-            <select
-              value={inviteDepartmentId ?? ""}
-              onChange={(e) => setInviteDepartmentId(e.target.value || null)}
-              disabled={!isAdmin}
-              className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50"
-            >
-              <option value="">Sem setor</option>
-              {activeDepartments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div>
+            <label className="text-sm font-medium text-gray-700">
+              Setor principal (opcional)
+              <select
+                value={inviteDepartmentId ?? ""}
+                onChange={(e) => setInviteDepartmentId(e.target.value || null)}
+                disabled={!isAdmin}
+                className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50"
+              >
+                <option value="">Sem setor</option>
+                {activeDepartments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
             <button

@@ -9,6 +9,8 @@ import {
   type AnalyticsResponse,
   type BacklogItem,
 } from "../services/inboxAnalytics";
+import PreTitleIcon from "../components/ui/PreTitleIcon";
+import { MessageCircleIcon } from "lucide-react";
 
 const CHANNEL_OPTIONS = ["whatsapp", "instagram", "messenger"];
 const CHANNEL_LABEL: Record<string, string> = {
@@ -84,8 +86,8 @@ const SectionHeader = ({
 }) => (
   <div className="mb-3 flex items-start justify-between gap-3">
     <div>
-      <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
-      {subtitle ? <p className="text-xs text-slate-500">{subtitle}</p> : null}
+      <h2 className="text-lg font-semibold text-slate-700">{title}</h2>
+      {subtitle ? <p className="text-md text-slate-500">{subtitle}</p> : null}
     </div>
     {right}
   </div>
@@ -367,14 +369,17 @@ export const InboxAnalyticsDashboard: React.FC = () => {
         {/* FILTROS */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-900">
-                Análise & Atendimento
-              </h1>
-              <p className="text-sm text-slate-500">
-                Visão executiva, decisão por canal/departamento e ação imediata
-                no backlog
-              </p>
+            <div className="flex items-center gap-3">
+              <PreTitleIcon icon={MessageCircleIcon} />
+              <div>
+                <h1 className="text-2xl font-semibold text-slate-900">
+                  Análise & Atendimento
+                </h1>
+                <p className="text-sm text-slate-500">
+                  Visão executiva, decisão por canal/departamento e ação
+                  imediata no backlog
+                </p>
+              </div>
             </div>
             <div className="flex gap-2">
               <button
@@ -480,7 +485,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
               <>
                 <KpiCard label="Novos leads" value={analytics.kpis.leads} />
                 <KpiCard
-                  label="Backlog sem resposta"
+                  label="Mensagens sem resposta"
                   value={backlogTotal}
                   hint="No momento"
                 />
@@ -667,7 +672,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-slate-700">
-                  Backlog sem resposta
+                  Mensagens sem resposta
                 </h2>
                 <p className="text-xs text-slate-500">
                   Clique em uma linha para abrir a conversa.

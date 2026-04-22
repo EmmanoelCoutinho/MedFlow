@@ -9,6 +9,7 @@ import {
 import { Input } from "../components/ui/Input";
 import { supabase } from "../lib/supabaseClient";
 import { useClinic } from "../contexts/ClinicContext";
+import PreTitleIcon from "../components/ui/PreTitleIcon";
 
 type Department = {
   id: string;
@@ -24,7 +25,6 @@ type Department = {
 
 type DepartmentFormValues = {
   name: string;
-  slug: string;
   description: string;
   is_active: boolean;
   is_default: boolean;
@@ -45,20 +45,23 @@ type DepartmentActionError = {
 
 const normalizeSlug = (value: string) => {
   return value
-    .toLowerCase()
     .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00E7/g, "c")
+    .replace(/\u00C7/g, "c")
+    .toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-");
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
 };
 
-const isPermissionError = (error: { status?: number; code?: string } | null) => {
+const isPermissionError = (
+  error: { status?: number; code?: string } | null,
+) => {
   if (!error) return false;
-  return (
-    error.status === 401 ||
-    error.status === 403 ||
-    error.code === "42501"
-  );
+  return error.status === 401 || error.status === 403 || error.code === "42501";
 };
 
 const mapRowToDepartment = (row: Department): Department => ({
@@ -79,14 +82,14 @@ const buildDepartmentPayload = (
 ) => ({
   clinic_id: clinicId,
   name: values.name.trim(),
-  slug: normalizeSlug(values.slug),
+  slug: normalizeSlug(values.name),
   description: values.description.trim() || null,
   is_active: values.is_active,
 });
 
 const buildDepartmentUpdatePayload = (values: DepartmentFormValues) => ({
   name: values.name.trim(),
-  slug: normalizeSlug(values.slug),
+  slug: normalizeSlug(values.name),
   description: values.description.trim() || null,
   is_active: values.is_active,
 });
@@ -125,19 +128,18 @@ export const DepartmentsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
-  const [editingDepartment, setEditingDepartment] =
-    useState<Department | null>(null);
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(
+    null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Department | null>(null);
-  const [slugTouched, setSlugTouched] = useState(false);
-  const [formErrors, setFormErrors] = useState<{ name?: string; slug?: string }>(
-    {},
-  );
+  const [formErrors, setFormErrors] = useState<{
+    name?: string;
+  }>({});
   const [formValues, setFormValues] = useState<DepartmentFormValues>({
     name: "",
-    slug: "",
     description: "",
     is_active: true,
     is_default: false,
@@ -148,23 +150,18 @@ export const DepartmentsPage: React.FC = () => {
   const resetForm = useCallback(() => {
     setFormValues({
       name: "",
-      slug: "",
       description: "",
       is_active: true,
       is_default: false,
     });
     setEditingDepartment(null);
-    setSlugTouched(false);
     setFormErrors({});
   }, []);
 
   const validateForm = useCallback(() => {
-    const nextErrors: { name?: string; slug?: string } = {};
+    const nextErrors: { name?: string } = {};
     if (!formValues.name.trim()) {
       nextErrors.name = "Nome é obrigatório";
-    }
-    if (!formValues.slug.trim()) {
-      nextErrors.slug = "Slug é obrigatório";
     }
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -382,12 +379,10 @@ export const DepartmentsPage: React.FC = () => {
     setEditingDepartment(department);
     setFormValues({
       name: department.name,
-      slug: department.slug,
       description: department.description ?? "",
       is_active: department.is_active,
       is_default: department.is_default,
     });
-    setSlugTouched(true);
     setFormErrors({});
     setIsModalOpen(true);
   };
@@ -401,15 +396,6 @@ export const DepartmentsPage: React.FC = () => {
     setFormValues((prev) => ({
       ...prev,
       name: value,
-      slug: slugTouched ? prev.slug : normalizeSlug(value),
-    }));
-  };
-
-  const handleSlugChange = (value: string) => {
-    setSlugTouched(true);
-    setFormValues((prev) => ({
-      ...prev,
-      slug: normalizeSlug(value),
     }));
   };
 
@@ -443,7 +429,10 @@ export const DepartmentsPage: React.FC = () => {
         }
         pushToast(buildToast("Departamento criado com sucesso", "success"));
       } else if (editingDepartment) {
-        const updated = await updateDepartment(editingDepartment.id, formValues);
+        const updated = await updateDepartment(
+          editingDepartment.id,
+          formValues,
+        );
         if (updated) {
           setDepartments((prev) =>
             prev.map((item) => (item.id === updated.id ? updated : item)),
@@ -467,9 +456,7 @@ export const DepartmentsPage: React.FC = () => {
       closeModal();
       fetchDepartments();
     } catch (error) {
-      handleActionError(
-        error as DepartmentActionError,
-      );
+      handleActionError(error as DepartmentActionError);
     } finally {
       setIsSubmitting(false);
     }
@@ -512,9 +499,7 @@ export const DepartmentsPage: React.FC = () => {
       if (updated) {
         setDepartments((prev) =>
           prev.map((item) =>
-            item.id === updated.id
-              ? updated
-              : { ...item, is_default: false },
+            item.id === updated.id ? updated : { ...item, is_default: false },
           ),
         );
       }
@@ -532,10 +517,7 @@ export const DepartmentsPage: React.FC = () => {
 
     if (department.is_default && department.is_active) {
       pushToast(
-        buildToast(
-          "Não é possível desativar o departamento padrão",
-          "info",
-        ),
+        buildToast("Não é possível desativar o departamento padrão", "info"),
       );
       return;
     }
@@ -581,13 +563,16 @@ export const DepartmentsPage: React.FC = () => {
     <div className="flex h-full flex-col bg-slate-50">
       <div className="px-10 pt-8 pb-4 border-b bg-white">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">
-              Departamentos
-            </h1>
-            <p className="text-sm text-gray-500">
-              Apenas administradores podem alterar departamentos.
-            </p>
+          <div className="flex items-center gap-3">
+            <PreTitleIcon icon={Building2Icon} />
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">
+                Departamentos
+              </h1>
+              <p className="text-sm text-gray-500">
+                Apenas administradores podem alterar departamentos.
+              </p>
+            </div>
           </div>
           <button
             type="button"
@@ -604,151 +589,146 @@ export const DepartmentsPage: React.FC = () => {
       <div className="flex-1 overflow-y-auto bg-slate-50">
         <div className="px-10 py-8">
           {error ? (
-              <div className="rounded-2xl border border-red-100 bg-white p-8 text-center shadow-sm">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Ocorreu um erro ao carregar
-                </h2>
-                <p className="mt-2 text-sm text-gray-500">{error}</p>
-                <button
-                  type="button"
-                  onClick={fetchDepartments}
-                  className="mt-6 inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300"
-                >
-                  Tentar novamente
-                </button>
+            <div className="rounded-2xl border border-red-100 bg-white p-8 text-center shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Ocorreu um erro ao carregar
+              </h2>
+              <p className="mt-2 text-sm text-gray-500">{error}</p>
+              <button
+                type="button"
+                onClick={fetchDepartments}
+                className="mt-6 inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3, 4].map((row) => (
+                <div
+                  key={row}
+                  className="h-16 rounded-2xl border border-slate-200 bg-white/70 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : sortedDepartments.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                <Building2Icon className="h-6 w-6 text-slate-500" />
               </div>
-            ) : isLoading ? (
-              <div className="space-y-4">
-                {[1, 2, 3, 4].map((row) => (
-                  <div
-                    key={row}
-                    className="h-16 rounded-2xl border border-slate-200 bg-white/70 animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : sortedDepartments.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                  <Building2Icon className="h-6 w-6 text-slate-500" />
-                </div>
-                <h2 className="mt-4 text-lg font-semibold text-gray-900">
-                  Nenhum departamento cadastrado
-                </h2>
-                <p className="mt-2 text-sm text-gray-500">
-                  Organize seus atendimentos criando departamentos para cada
-                  área.
-                </p>
-                <button
-                  type="button"
-                  onClick={openCreateModal}
-                  className="mt-6 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  Criar departamento
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <table className="min-w-full divide-y divide-slate-100">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-6 py-4">Nome</th>
-                      <th className="px-6 py-4">Slug</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4">Default</th>
-                      <th className="px-6 py-4">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {sortedDepartments.map((department) => (
-                      <tr key={department.id}>
-                        <td className="px-6 py-4">
-                          <p className="text-sm font-semibold text-slate-800">
-                            {department.name}
+              <h2 className="mt-4 text-lg font-semibold text-gray-900">
+                Nenhum departamento cadastrado
+              </h2>
+              <p className="mt-2 text-sm text-gray-500">
+                Organize seus atendimentos criando departamentos para cada área.
+              </p>
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="mt-6 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300"
+              >
+                <PlusIcon className="h-4 w-4" />
+                Criar departamento
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <table className="min-w-full divide-y divide-slate-100">
+                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-6 py-4">Nome</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Default</th>
+                    <th className="px-6 py-4">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sortedDepartments.map((department) => (
+                    <tr key={department.id}>
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-semibold text-slate-800">
+                          {department.name}
+                        </p>
+                        {department.description && (
+                          <p className="text-xs text-slate-500">
+                            {department.description}
                           </p>
-                          {department.description && (
-                            <p className="text-xs text-slate-500">
-                              {department.description}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-600">
-                          {department.slug}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
-                              department.is_active
-                                ? "border-emerald-200 text-emerald-700 bg-emerald-50"
-                                : "border-slate-200 text-slate-500 bg-slate-50",
-                            ].join(" ")}
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={[
+                            "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
+                            department.is_active
+                              ? "border-emerald-200 text-emerald-700 bg-emerald-50"
+                              : "border-slate-200 text-slate-500 bg-slate-50",
+                          ].join(" ")}
+                        >
+                          {department.is_active ? "Ativo" : "Inativo"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={[
+                            "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
+                            department.is_default
+                              ? "border-blue-100 text-blue-700 bg-blue-50"
+                              : "border-slate-200 text-slate-500 bg-slate-50",
+                          ].join(" ")}
+                        >
+                          {department.is_default ? "Sim" : "Não"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(department)}
+                            disabled={!isAdmin}
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {department.is_active ? "Ativo" : "Inativo"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
+                            <Edit3Icon className="h-3.5 w-3.5" />
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDefaultToggle(department)}
+                            disabled={!isAdmin || department.is_default}
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <CheckIcon className="h-3.5 w-3.5" />
+                            Tornar padrão
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleActiveToggle(department)}
+                            disabled={!isAdmin}
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {department.is_active ? "Desativar" : "Ativar"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRequest(department)}
+                            disabled={!isAdmin || !canDelete(department)}
+                            title={
                               department.is_default
-                                ? "border-blue-100 text-blue-700 bg-blue-50"
-                                : "border-slate-200 text-slate-500 bg-slate-50",
-                            ].join(" ")}
+                                ? "O departamento padrão não pode ser excluído"
+                                : undefined
+                            }
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {department.is_default ? "Sim" : "Não"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(department)}
-                              disabled={!isAdmin}
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              <Edit3Icon className="h-3.5 w-3.5" />
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDefaultToggle(department)}
-                              disabled={!isAdmin || department.is_default}
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              <CheckIcon className="h-3.5 w-3.5" />
-                              Tornar padrão
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleActiveToggle(department)}
-                              disabled={!isAdmin}
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {department.is_active ? "Desativar" : "Ativar"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteRequest(department)}
-                              disabled={!isAdmin || !canDelete(department)}
-                              title={
-                                department.is_default
-                                  ? "O departamento padrão não pode ser excluído"
-                                  : undefined
-                              }
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              <Trash2Icon className="h-3.5 w-3.5" />
-                              Excluir
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                            <Trash2Icon className="h-3.5 w-3.5" />
+                            Excluir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
@@ -777,13 +757,6 @@ export const DepartmentsPage: React.FC = () => {
                 value={formValues.name}
                 onChange={(event) => handleNameChange(event.target.value)}
                 error={formErrors.name}
-              />
-              <Input
-                label="Slug"
-                placeholder="ex: financeiro"
-                value={formValues.slug}
-                onChange={(event) => handleSlugChange(event.target.value)}
-                error={formErrors.slug}
               />
               <div>
                 <label className="block text-sm font-medium text-slate-800 mb-1">
@@ -823,7 +796,10 @@ export const DepartmentsPage: React.FC = () => {
                     type="checkbox"
                     checked={formValues.is_default}
                     onChange={(event) => {
-                      if (editingDepartment?.is_default && !event.target.checked) {
+                      if (
+                        editingDepartment?.is_default &&
+                        !event.target.checked
+                      ) {
                         pushToast(
                           buildToast(
                             "O departamento padrão só pode ser alterado escolhendo outro",
@@ -882,8 +858,8 @@ export const DepartmentsPage: React.FC = () => {
               Excluir departamento
             </h3>
             <p className="mt-2 text-sm text-slate-500">
-              Tem certeza que deseja excluir “{pendingDelete.name}”? Essa ação não
-              poderá ser desfeita.
+              Tem certeza que deseja excluir “{pendingDelete.name}”? Essa ação
+              não poderá ser desfeita.
             </p>
             <div className="mt-6 flex items-center justify-end gap-3">
               <button

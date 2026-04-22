@@ -75,19 +75,20 @@ export const Header = () => {
             <div
               ref={menuRef}
               role="menu"
-              className="absolute right-0 -bottom-56 mt-2 w-64 rounded-lg border border-[#E5E7EB] bg-white shadow-lg z-50 overflow-hidden"
+              className="absolute right-10 -bottom-32 mt-2 w-64 rounded-lg border border-[#E5E7EB] bg-white shadow-lg z-50 overflow-hidden"
             >
               <div className="px-4 py-3 bg-[#F9FAFB]">
-                <div className="text-sm text-gray-500">Conta</div>
                 <div className="text-[#1E1E1E] font-medium">
                   {profile?.name}
                 </div>
                 {profile?.role && (
-                  <div className="text-sm text-gray-600">{profile?.role}</div>
+                  <div className="text-sm text-gray-600">
+                    {profile?.role === "admin" ? "Administrador" : "Usuário"}
+                  </div>
                 )}
               </div>
               <div className="py-1">
-                <button
+                {/* <button
                   className="w-full text-left px-4 py-2 text-sm hover:bg-[#F3F4F6]"
                   onClick={() => setOpen(false)}
                 >
@@ -98,7 +99,7 @@ export const Header = () => {
                   onClick={() => setOpen(false)}
                 >
                   Configurações
-                </button>
+                </button> */}
                 <div className="my-1 h-px bg-[#E5E7EB]" />
                 <button
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"

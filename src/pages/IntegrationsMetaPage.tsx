@@ -6,12 +6,14 @@ import {
   FacebookIcon,
   InstagramIcon,
   MessageCircleIcon,
+  Settings2Icon,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { SettingsTabs } from "../components/settings/SettingsTabs";
+import PreTitleIcon from "../components/ui/PreTitleIcon";
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string | undefined;
 const META_APP_WABA_ID = import.meta.env.VITE_META_APP_WABA_ID as
@@ -268,21 +270,24 @@ export const MetaIntegrationsPage: React.FC = () => {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50">
       <div className="border-b bg-white px-6 py-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">
-              Integrações
-            </h1>
-            <p className="text-sm text-gray-500">
-              Conecte seus canais da Meta para ativar Messenger, Instagram e
-              WhatsApp.
-            </p>
-            <SettingsTabs />
+        <div className="flex flex-col justify-center">
+          <div className="flex gap-3">
+            <PreTitleIcon icon={Settings2Icon} />
+            <span className="flex flex-col">
+              <h1 className="text-2xl font-semibold text-gray-900">
+                Integrações
+              </h1>
+              <p className="text-sm text-gray-500">
+                Conecte seus canais da Meta para ativar Messenger, Instagram e
+                WhatsApp.
+              </p>
+            </span>
           </div>
+          <SettingsTabs />
         </div>
       </div>
 
-      <div className="space-y-6 px-6 py-6 flex flex-col pb-56">
+      <div className="space-y-6 px-6 py-6 flex flex-col pb-20">
         {errorMsg ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMsg}

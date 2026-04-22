@@ -59,6 +59,29 @@ const asError = (error: unknown) => {
 };
 
 export const botsService = {
+  async findAnotherActiveBot(
+    clinicId: string,
+    currentBotId?: string | null,
+  ): Promise<SupabaseResult<BotRow | null>> {
+    try {
+      const { data, error } = await supabase
+        .from("bots")
+        .select("*")
+        .eq("clinic_id", clinicId)
+        .eq("is_deleted", false)
+        .eq("status", "active")
+        .neq("id", currentBotId ?? "")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) return { data: null, error: asError(error) };
+      return { data: (data as BotRow | null) ?? null, error: null };
+    } catch (e) {
+      return { data: null, error: asError(e) };
+    }
+  },
+
   async validateBotBeforePublish(
     botId: string,
   ): Promise<SupabaseResult<{ ok: true }>> {

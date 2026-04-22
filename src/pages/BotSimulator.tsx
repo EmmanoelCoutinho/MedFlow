@@ -161,7 +161,8 @@ export const BotSimulator = ({
   const handleChoose = (opt: BotOptionRow) => {
     if (ended) return;
 
-    setHistory((prev) => [...prev, { role: "user", text: opt.option_value }]);
+    const selectedOptionText = opt.label?.trim() || opt.option_value;
+    setHistory((prev) => [...prev, { role: "user", text: selectedOptionText }]);
 
     if (opt.message_to_send?.trim()) {
       setHistory((prev) => [
@@ -291,7 +292,7 @@ export const BotSimulator = ({
               Etapa atual:{" "}
               <span className="font-mono">{currentNode?.node_key ?? "-"}</span>
             </div>
-            <div className="mt-1">Sessao: {ended ? "encerrada" : "ativa"}</div>
+            <div className="mt-1">Sessão: {ended ? "encerrada" : "ativa"}</div>
           </div>
         </div>
       </Card>
@@ -329,7 +330,7 @@ export const BotSimulator = ({
           </div>
 
           {ended ? (
-            <div className="mt-4 text-sm text-slate-500">Sessao encerrada.</div>
+            <div className="mt-4 text-sm text-slate-500">Sessão encerrada.</div>
           ) : options.length === 0 ? (
             <div className="mt-4 text-sm text-slate-500">
               Nenhuma opção disponivel.

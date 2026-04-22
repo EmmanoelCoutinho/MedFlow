@@ -80,7 +80,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const closeIsDisabled = closeDisabled || isClosing;
 
   return (
-    <div className="sticky top-0 z-30 h-20 border-b border-[#E5E7EB] bg-white p-4">
+    <div className="sticky top-0 h-20 border-b border-[#E5E7EB] bg-white p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button

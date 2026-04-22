@@ -6,6 +6,8 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Card } from "../components/ui/Card";
 import { SettingsTabs } from "../components/settings/SettingsTabs";
+import PreTitleIcon from "../components/ui/PreTitleIcon";
+import { Settings2Icon } from "lucide-react";
 
 type ConversationAutomationSettingsRow = {
   clinic_id: string;
@@ -326,7 +328,7 @@ export const ConversationAutomationSettingsPage: React.FC = () => {
       <div className="flex h-full flex-1 flex-col bg-slate-50">
         <div className="border-b bg-white px-8 py-6">
           <h1 className="text-2xl font-semibold text-slate-900">
-            Automacoes de conversa
+            Automações do chat
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Carregando configuracoes da clinica...
@@ -349,12 +351,17 @@ export const ConversationAutomationSettingsPage: React.FC = () => {
   return (
     <div className="flex h-full flex-1 flex-col bg-slate-50">
       <div className="border-b bg-white px-8 py-6">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Automacoes de conversa
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Configure regras automaticas de SLA e ciclo de vida das conversas.
-        </p>
+        <div className="flex gap-3">
+          <PreTitleIcon icon={Settings2Icon} />
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">
+              Automações do chat
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Configure regras automaticas de SLA e ciclo de vida das conversas.
+            </p>
+          </div>
+        </div>
         <div className="flex py-4 items-center justify-between">
           <SettingsTabs />
 
@@ -444,7 +451,7 @@ export const ConversationAutomationSettingsPage: React.FC = () => {
             minutesError={formErrors.autoCloseAfterMinutes}
           />
 
-          <AutomationCard
+          {/* <AutomationCard
             title="Reabrir conversa automaticamente"
             description="Se o cliente enviar nova mensagem, a conversa encerrada e reaberta automaticamente."
             enabled={formValues.reopenOnInboundEnabled}
@@ -454,7 +461,7 @@ export const ConversationAutomationSettingsPage: React.FC = () => {
               })
             }
             showMinutesInput={false}
-          />
+          /> */}
 
           <div className="flex items-center justify-end pt-2">
             <Button

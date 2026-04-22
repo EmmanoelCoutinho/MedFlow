@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -12,7 +12,7 @@ import type { BotRow } from "../types/bots";
 import { BotNodesEditor } from "./BotNodesEditor";
 import { BotBindingsEditor } from "./BotBindingsEditor";
 import { BotSimulator } from "./BotSimulator";
-import { Trash } from "lucide-react";
+import { ChevronLeft, Trash } from "lucide-react";
 
 type EditorTab = "general" | "nodes" | "bindings" | "simulator";
 
@@ -52,6 +52,9 @@ const parsePositiveInt = (value: string) => {
   return parsed;
 };
 
+const getActiveBotConflictMessage = (activeBotName: string) =>
+  `Não foi possível ativar este bot porque o bot "${activeBotName}" já está ativo. Se quiser ativar este, desative o bot que já está ativo primeiro.`;
+
 type BotEditorPageProps = {
   mode: "new" | "edit";
 };
@@ -81,7 +84,7 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
   const [errors, setErrors] = useState<BotFormErrors>({});
 
   const title = useMemo(() => {
-    if (isNew) return "Novo bot";
+    if (isNew) return "Criar novo bot";
     return bot?.name ? `Editar: ${bot.name}` : "Editar bot";
   }, [bot?.name, isNew]);
 
@@ -170,6 +173,22 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
     const maxInvalid = parsePositiveInt(form.max_invalid_attempts);
     if (!maxInvalid) return;
 
+    if (form.status === "active") {
+      const activeBotRes = await botsService.findAnotherActiveBot(
+        clinicId,
+        bot?.id,
+      );
+      if (activeBotRes.error) {
+        toast.error(activeBotRes.error.message);
+        return;
+      }
+
+      if (activeBotRes.data) {
+        toast.error(getActiveBotConflictMessage(activeBotRes.data.name));
+        return;
+      }
+    }
+
     setSaving(true);
     const payload: Partial<BotRow> = {
       clinic_id: clinicId,
@@ -230,49 +249,6 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
     navigate("/inbox/bots");
   };
 
-  const handleTogglePublished = async () => {
-    if (!clinicId || !bot?.id) return;
-    if (!isAdmin) return toast.error("Você não tem permissão para esta ação.");
-    const next = !bot.published;
-
-    if (next) {
-      const v = await botsService.validateBotBeforePublish(bot.id);
-      if (v.error) {
-        toast.error(v.error.message);
-        return;
-      }
-    }
-
-    setBot((prev) => (prev ? ({ ...prev, published: next } as BotRow) : prev));
-    const res = await botsService.updateBot(clinicId, bot.id, {
-      published: next,
-    });
-    if (res.error) {
-      setBot((prev) =>
-        prev ? ({ ...prev, published: !next } as BotRow) : prev,
-      );
-      toast.error(res.error.message);
-      return;
-    }
-    toast.success(next ? "Bot publicado." : "Bot despublicado.");
-  };
-
-  const handleToggleStatus = async () => {
-    if (!clinicId || !bot?.id) return;
-    if (!isAdmin) return toast.error("Você não tem permissão para esta ação.");
-    const next = bot.status === "active" ? "inactive" : "active";
-    setBot((prev) => (prev ? ({ ...prev, status: next } as BotRow) : prev));
-    const res = await botsService.updateBot(clinicId, bot.id, { status: next });
-    if (res.error) {
-      setBot((prev) =>
-        prev ? ({ ...prev, status: bot.status } as BotRow) : prev,
-      );
-      toast.error(res.error.message);
-      return;
-    }
-    toast.success(next === "active" ? "Bot ativado." : "Bot desativado.");
-  };
-
   const tabButton = (key: EditorTab, label: string, disabled?: boolean) => {
     const active = tab === key;
     return (
@@ -299,13 +275,13 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
         <div className="flex flex-col gap-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-sm text-slate-500">
-                <Link className="hover:underline" to="/inbox/bots">
-                  Bots
-                </Link>{" "}
-                <span className="text-slate-400">/</span>{" "}
-                {isNew ? "Novo" : "Editar"}
-              </div>
+              <span
+                onClick={() => navigate("/inbox/bots")}
+                className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer"
+              >
+                <ChevronLeft className="h-5 w-5" />
+                <span className="pb-0.5">Voltar</span>
+              </span>
               <h1 className="mt-1 text-2xl font-semibold text-gray-900">
                 {title}
               </h1>
@@ -327,22 +303,6 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
               >
                 Salvar
               </Button>
-              {/* <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleTogglePublished}
-                disabled={!bot?.id || !isAdmin || loading}
-              >
-                {bot?.published ? "Despublicar" : "Publicar"}
-              </Button> */}
-              {/* <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleToggleStatus}
-                disabled={!bot?.id || !isAdmin || loading}
-              >
-                {bot?.status === "active" ? "Desativar" : "Ativar"}
-              </Button> */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -566,17 +526,17 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
         ) : tab === "nodes" ? (
           <BotNodesEditor
             clinicId={clinicId!}
-            botId={bot.id}
+            botId={bot!.id}
             isAdmin={isAdmin}
           />
         ) : tab === "bindings" ? (
           <BotBindingsEditor
             clinicId={clinicId!}
-            botId={bot.id}
+            botId={bot!.id}
             isAdmin={isAdmin}
           />
         ) : tab === "simulator" ? (
-          <BotSimulator clinicId={clinicId!} botId={bot.id} bot={bot} />
+          <BotSimulator clinicId={clinicId!} botId={bot!.id} bot={bot!} />
         ) : (
           <Card className="p-6">
             <div>

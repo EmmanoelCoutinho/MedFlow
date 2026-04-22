@@ -75,7 +75,7 @@ const getEndSessionControlState = (
     return {
       disabled: true,
       helper:
-        "Desativado porque uma opcao com proxima etapa nao pode encerrar a sessao.",
+        "Desativado porque uma opcao com proxima etapa nao pode encerrar a Sessão.",
     };
   }
 
@@ -830,8 +830,7 @@ export const BotNodesEditor = ({
                         opt.action_type === "end_flow";
                       const normalizedEndSession =
                         normalizeOptionEndSession(opt);
-                      const endSessionControl =
-                        getEndSessionControlState(opt);
+                      const endSessionControl = getEndSessionControlState(opt);
 
                       return (
                         <div
