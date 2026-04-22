@@ -245,7 +245,7 @@ export const BotsSettingsPage: React.FC = () => {
               <h1 className="text-2xl font-semibold text-gray-900">Bots</h1>
               <p className="text-sm text-gray-500">
                 Configure fluxos de triagem e vincule bots aos canais da
-                clínica.
+                Empresa.
               </p>
             </div>
           </div>

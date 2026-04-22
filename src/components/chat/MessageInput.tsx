@@ -7,11 +7,14 @@ import {
   FileIcon,
   LockIcon,
   MicIcon,
+  MessageSquareTextIcon,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button } from "../ui/Button";
 import { supabase } from "../../lib/supabaseClient";
 import { EmojiPicker } from "./EmojiPicker";
+import { QuickMessagesPicker } from "./QuickMessagesPicker";
+import type { QuickMessage } from "../../services/quickMessages";
 
 type SendableInput =
   | string
@@ -28,6 +31,10 @@ interface MessageInputProps {
   onSend: (input: SendableInput) => void;
   disabled?: boolean;
   disabledReason?: string;
+  draft?: string;
+  onDraftChange?: (value: string) => void;
+  quickMessages?: QuickMessage[];
+  quickMessagesLoading?: boolean;
 }
 
 type AllowedImageMime = "image/jpeg" | "image/png";
@@ -51,22 +58,30 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onSend,
   disabled = false,
   disabledReason,
+  draft,
+  onDraftChange,
+  quickMessages = [],
+  quickMessagesLoading = false,
 }) => {
-  const [message, setMessage] = useState("");
+  const [internalMessage, setInternalMessage] = useState("");
   const [showEmojis, setShowEmojis] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
+  const [showQuickMessages, setShowQuickMessages] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSendingAudio, setIsSendingAudio] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
 
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const attachmentsRef = useRef<HTMLDivElement | null>(null);
+  const quickMessagesRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const docInputRef = useRef<HTMLInputElement | null>(null);
   const recordStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const message = draft ?? internalMessage;
+  const setMessage = onDraftChange ?? setInternalMessage;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -75,9 +90,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       if (pickerRef.current && pickerRef.current.contains(target)) return;
       if (attachmentsRef.current && attachmentsRef.current.contains(target))
         return;
+      if (
+        quickMessagesRef.current &&
+        quickMessagesRef.current.contains(target)
+      ) {
+        return;
+      }
 
       setShowEmojis(false);
       setShowAttachments(false);
+      setShowQuickMessages(false);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -89,6 +111,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     setShowEmojis(false);
     setShowAttachments(false);
+    setShowQuickMessages(false);
 
     if (
       mediaRecorderRef.current &&
@@ -156,7 +179,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const handleEmojiClick = (emoji: string) => {
     if (disabled) return;
 
-    setMessage((prev) => `${prev}${emoji}`);
+    setMessage(`${message}${emoji}`);
   };
 
   const AUDIO_CONVERTER_URL = import.meta.env.VITE_AUDIO_CONVERTER_URL;
@@ -582,6 +605,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     setShowAttachments((prev) => !prev);
     setShowEmojis(false);
+    setShowQuickMessages(false);
   };
 
   const handleImageOption = () => {
@@ -589,6 +613,22 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     setShowAttachments(false);
     fileInputRef.current?.click();
+  };
+
+  const openQuickMessagesPicker = (
+    event?: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    if (disabled) return;
+
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    setShowEmojis(false);
+    setShowAttachments(false);
+
+    requestAnimationFrame(() => {
+      setShowQuickMessages(true);
+    });
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -789,6 +829,19 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               >
                 <button
                   type="button"
+                  onMouseDown={openQuickMessagesPicker}
+                  onClick={openQuickMessagesPicker}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-[#F3F4F6] transition-colors"
+                >
+                  <span className="flex items-center gap-2 text-[#1F2937]">
+                    <MessageSquareTextIcon className="w-4 h-4" />
+                    Mensagens rápidas
+                  </span>
+                  <span className="text-xs text-[#6B7280]">Abrir</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleImageOption}
                   className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-[#F3F4F6] transition-colors"
                 >
@@ -907,6 +960,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         accept=".txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
         className="invisible"
         onChange={handleDocumentChange}
+      />
+
+      <QuickMessagesPicker
+        open={showQuickMessages && !disabled}
+        loading={quickMessagesLoading}
+        quickMessages={quickMessages}
+        onClose={() => setShowQuickMessages(false)}
+        contentRef={quickMessagesRef}
+        onSelect={(selectedMessage) => {
+          setMessage(selectedMessage);
+        }}
       />
     </div>
   );

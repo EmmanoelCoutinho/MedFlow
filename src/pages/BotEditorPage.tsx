@@ -361,18 +361,18 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
             {!clinicId ? (
               <Card className="p-6">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  Clínica não identificada
+                  Empresa não identificada
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Aguarde o contexto de clínica carregar para editar o bot.
+                  Aguarde o contexto de Empresa carregar para editar o bot.
                 </p>
               </Card>
             ) : null}
 
             {!isAdmin ? (
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-                Você está em modo somente leitura (apenas admin pode editar
-                bots).
+                Você está em modo somente leitura (apenas administrador pode
+                editar bots).
               </div>
             ) : null}
 

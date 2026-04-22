@@ -13,6 +13,7 @@ import { useClinic } from "../contexts/ClinicContext";
 import type { Conversation, Message, Channel } from "../types";
 import { useMessages, mapDbMessage } from "../hooks/useMessages";
 import { useConversationEvents } from "../hooks/useConversationEvents";
+import { useQuickMessages } from "../hooks/useQuickMessages";
 import { Button } from "../components/ui/Button";
 import { ChatHeader } from "../components/chat/ChatHeader";
 import { MessageBubble } from "../components/chat/MessageBubble";
@@ -134,6 +135,7 @@ export const Chat: React.FC = () => {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(true);
+  const [draftMessage, setDraftMessage] = useState("");
 
   const [isManageTagsOpen, setIsManageTagsOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState<UiTag[]>([]);
@@ -151,6 +153,13 @@ export const Chat: React.FC = () => {
     loading: loadingMessages,
     setMessages,
   } = useMessages(id ?? null);
+
+  const { quickMessages, loading: loadingQuickMessages } = useQuickMessages(
+    clinicId,
+    {
+      enabled: Boolean(clinicId),
+    },
+  );
 
   const {
     events,
@@ -185,6 +194,7 @@ export const Chat: React.FC = () => {
     setAvailableTags([]);
     setLoadingConversation(true);
     setRefreshingConversation(false);
+    setDraftMessage("");
   }, [id]);
 
   const getContainerMetrics = () => {
@@ -1208,7 +1218,14 @@ export const Chat: React.FC = () => {
       />
 
       {conversation?.status === "open" && (
-        <MessageInput onSend={handleSendMessage} disabled={!canReply} />
+        <MessageInput
+          onSend={handleSendMessage}
+          disabled={!canReply}
+          draft={draftMessage}
+          onDraftChange={setDraftMessage}
+          quickMessages={quickMessages}
+          quickMessagesLoading={loadingQuickMessages}
+        />
       )}
     </div>
   );

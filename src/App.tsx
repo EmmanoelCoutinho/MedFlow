@@ -23,6 +23,7 @@ import { MetaCallbackPage } from "./pages/IntegrationCallbackPage";
 import { ConversationAutomationSettingsPage } from "./pages/ConversationAutomationSettingsPage";
 import { BotsSettingsPage } from "./pages/BotsSettingsPage";
 import { BotEditorPage } from "./pages/BotEditorPage";
+import { QuickMessagesPage } from "./pages/QuickMessagesPage";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -91,6 +92,7 @@ function RoutedApp() {
             <Route path="tags" element={<Tags />} />
             <Route path="departments" element={<DepartmentsPage />} />
             <Route path="attendants" element={<AttendantsPage />} />
+            <Route path="quick-messages" element={<QuickMessagesPage />} />
             <Route
               path="settings/integrations/meta"
               element={<MetaIntegrationsPage />}

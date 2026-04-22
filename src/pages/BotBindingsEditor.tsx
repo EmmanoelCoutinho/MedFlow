@@ -274,7 +274,7 @@ export const BotBindingsEditor = ({
       {connections.length === 0 ? (
         <Card className="p-6">
           <div className="text-sm text-slate-600">
-            Nenhuma conexão de canal encontrada para esta clínica.
+            Nenhuma conexão de canal encontrada para esta Empresa.
           </div>
         </Card>
       ) : (

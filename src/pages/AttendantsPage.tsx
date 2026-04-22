@@ -586,7 +586,7 @@ export const AttendantsPage: React.FC = () => {
     if (!editingUser || !clinicId) return;
 
     if (isLastAdminDemotion) {
-      toast.error("Você não pode rebaixar o último admin da clínica");
+      toast.error("Você não pode rebaixar o último admin da Empresa");
       return;
     }
 
@@ -766,7 +766,7 @@ export const AttendantsPage: React.FC = () => {
                     className="w-36 appearance-none rounded-full border border-gray-200 bg-white px-3 py-2 pr-8 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   >
                     <option value="all">Todos</option>
-                    <option value="admin">Admin</option>
+                    <option value="admin">Administrador</option>
                     <option value="agent">Atendente</option>
                   </select>
                   <ChevronDownIcon className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-gray-400" />
@@ -916,7 +916,7 @@ export const AttendantsPage: React.FC = () => {
                   disabled={!isAdmin}
                   className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50"
                 >
-                  <option value="admin">Admin</option>
+                  <option value="admin">Administrador</option>
                   <option value="agent">Atendente</option>
                 </select>
               </label>
@@ -979,7 +979,7 @@ export const AttendantsPage: React.FC = () => {
 
             {isLastAdminDemotion && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                Você não pode rebaixar o último admin da clínica.
+                Você não pode rebaixar o último administrador da Empresa.
               </div>
             )}
 
@@ -1017,7 +1017,7 @@ export const AttendantsPage: React.FC = () => {
 
       <Modal
         title="Confirmar remoção"
-        description="Isso remove o vínculo do usuário com a clínica. A conta continuará existindo no Supabase Auth."
+        description="Isso remove o vínculo do usuário com a Empresa. A conta continuará existindo no Supabase Auth."
         isOpen={activeModal === "remove" && !!editingUser}
         onClose={handleCloseModal}
       >
@@ -1082,7 +1082,7 @@ export const AttendantsPage: React.FC = () => {
                 disabled={!isAdmin}
                 className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-gray-50"
               >
-                <option value="admin">Admin</option>
+                <option value="admin">Administrador</option>
                 <option value="agent">Atendente</option>
               </select>
             </label>

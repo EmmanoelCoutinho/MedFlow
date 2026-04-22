@@ -8,6 +8,14 @@ export type Tag = {
   createdAt?: string;
 };
 
+export type QuickMessage = {
+  id: string;
+  clinicId: string;
+  message: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type MessageDirection = "inbound" | "outbound";
 
 export type MessageSendStatus = "sending" | "failed" | "sent";
