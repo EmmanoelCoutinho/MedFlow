@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   BotIcon,
   Building2Icon,
+  MegaphoneIcon,
   MessageCircleIcon,
   MessageSquareIcon,
   MessageSquareTextIcon,
@@ -41,9 +42,7 @@ export const Inbox: React.FC = () => {
   useEffect(() => {
     const baseTitle = "Unxet";
     document.title =
-      totalUnreadCount > 0
-        ? `(${totalUnreadCount}) ${baseTitle}`
-        : baseTitle;
+      totalUnreadCount > 0 ? `(${totalUnreadCount}) ${baseTitle}` : baseTitle;
 
     return () => {
       document.title = baseTitle;
@@ -109,7 +108,7 @@ export const Inbox: React.FC = () => {
       path: "/inbox",
       extraPaths: ["/inbox/chat"],
     },
-    { label: "Carteira de contatos", icon: FiBookOpen },
+    // { label: "Carteira de contatos", icon: FiBookOpen },
     { label: "Atendentes", icon: UsersIcon, path: "/inbox/attendants" },
     { label: "Departamentos", icon: Building2Icon, path: "/inbox/departments" },
     { label: "Etiquetas", icon: TagIcon, path: "/inbox/tags" },
@@ -119,6 +118,11 @@ export const Inbox: React.FC = () => {
       icon: MessageSquareTextIcon,
       path: "/inbox/quick-messages",
     },
+    // {
+    //   label: "Marketing / Campanhas",
+    //   icon: MegaphoneIcon,
+    //   path: "/inbox/marketing-campaigns",
+    // },
   ];
 
   return (

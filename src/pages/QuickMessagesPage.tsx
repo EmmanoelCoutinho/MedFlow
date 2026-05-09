@@ -116,7 +116,7 @@ export const QuickMessagesPage: React.FC = () => {
                 Mensagens rápidas
               </h1>
               <p className="mt-1 text-sm text-gray-500">
-                administradores gerenciam os atalhos da Empresa. Agentes podem
+                Administradores gerenciam os atalhos da Empresa. Agentes podem
                 apenas consultar e usar na conversa.
               </p>
             </div>
