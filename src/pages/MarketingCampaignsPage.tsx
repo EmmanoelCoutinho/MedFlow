@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   BarChart3Icon,
   CheckCircle2Icon,
@@ -10,40 +10,42 @@ import {
   SendIcon,
   XIcon,
 } from "lucide-react";
+import { toast } from "react-toastify";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import PreTitleIcon from "../components/ui/PreTitleIcon";
+import { useClinic } from "../contexts/ClinicContext";
+import {
+  useCampaign,
+  useCampaigns,
+} from "../modules/marketing/hooks/useCampaigns";
+import { useCampaignRecipients } from "../modules/marketing/hooks/useCampaignRecipients";
+import { useAudiencePreview } from "../modules/marketing/hooks/useAudiencePreview";
+import {
+  useTemplate,
+  useTemplates,
+} from "../modules/marketing/hooks/useTemplates";
+import type { CampaignWithTemplate } from "../modules/marketing/types/campaigns";
+import type { CampaignRecipient } from "../modules/marketing/types/recipients";
+import type {
+  MessageTemplate,
+  MessageTemplateCategory,
+  MessageTemplateStatus,
+} from "../modules/marketing/types/templates";
+import type { ResolveAudienceType } from "../modules/marketing/utils/resolveAudience";
 
 type MarketingTab = "templates" | "campaigns";
-type TemplateStatus =
-  | "draft"
-  | "submitted"
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "paused"
-  | "disabled"
-  | "archived";
-type TemplateCategory = "marketing" | "utility" | "authentication";
-type CampaignStatus =
-  | "draft"
-  | "scheduled"
-  | "sending"
-  | "sent"
-  | "partially_failed"
-  | "failed"
-  | "cancelled";
 type AudienceType = "all" | "tag" | "manual";
 type DeliveryMode = "now" | "scheduled";
 type CampaignWizardStep = 1 | 2 | 3 | 4 | 5;
 
-type Template = {
+type TemplateView = {
   id: string;
   internalName: string;
   metaName: string;
-  category: TemplateCategory;
+  category: MessageTemplateCategory;
   language: string;
-  status: TemplateStatus;
+  status: MessageTemplateStatus;
   body: string;
   variablesExample: string;
   footer: string;
@@ -52,14 +54,14 @@ type Template = {
   updatedAt: string;
 };
 
-type Campaign = {
+type CampaignView = {
   id: string;
   name: string;
   description: string;
   templateId: string;
   audienceType: AudienceType;
   audienceLabel: string;
-  status: CampaignStatus;
+  status: CampaignWithTemplate["status"];
   sendMode: DeliveryMode;
   sendAt: string;
   totalContacts: number;
@@ -69,22 +71,16 @@ type Campaign = {
   failed: number;
   createdAt: string;
   channelLabel: string;
+  template?: TemplateView | null;
+  audienceFilters: Record<string, unknown>;
 };
 
-type CampaignRecipientStatus =
-  | "scheduled"
-  | "sent"
-  | "delivered"
-  | "read"
-  | "replied"
-  | "failed";
-
-type CampaignRecipient = {
+type CampaignRecipientView = {
   id: string;
   campaignId: string;
   name: string;
   phone: string;
-  status: CampaignRecipientStatus;
+  status: CampaignRecipient["status"];
   readAt: string | null;
   replied: boolean;
   conversation: string;
@@ -94,7 +90,7 @@ type CampaignRecipient = {
 type TemplateFormState = {
   internalName: string;
   metaName: string;
-  category: TemplateCategory;
+  category: MessageTemplateCategory;
   language: string;
   body: string;
   variablesExample: string;
@@ -136,8 +132,10 @@ type ModalShellProps = {
   widthClassName?: string;
 };
 
+const whatsappAccountOptions = ["WhatsApp Principal • +55 11 4000-1000"];
+
 const templateStatusMap: Record<
-  TemplateStatus,
+  MessageTemplateStatus,
   { label: string; className: string }
 > = {
   draft: {
@@ -149,7 +147,7 @@ const templateStatusMap: Record<
     className: "border-sky-200 bg-sky-50 text-sky-700",
   },
   pending: {
-    label: "Em análise",
+    label: "Em analise",
     className: "border-amber-200 bg-amber-50 text-amber-700",
   },
   approved: {
@@ -174,14 +172,14 @@ const templateStatusMap: Record<
   },
 };
 
-const templateCategoryMap: Record<TemplateCategory, string> = {
+const templateCategoryMap: Record<MessageTemplateCategory, string> = {
   marketing: "Marketing",
   utility: "Utilidade",
-  authentication: "Autenticação",
+  authentication: "Autenticacao",
 };
 
 const campaignStatusMap: Record<
-  CampaignStatus,
+  CampaignWithTemplate["status"],
   { label: string; className: string }
 > = {
   draft: {
@@ -193,11 +191,11 @@ const campaignStatusMap: Record<
     className: "border-indigo-200 bg-indigo-50 text-indigo-700",
   },
   sending: {
-    label: "Enviando",
+    label: "Preparada",
     className: "border-sky-200 bg-sky-50 text-sky-700",
   },
   sent: {
-    label: "Enviada",
+    label: "Concluida",
     className: "border-emerald-200 bg-emerald-50 text-emerald-700",
   },
   partially_failed: {
@@ -215,11 +213,15 @@ const campaignStatusMap: Record<
 };
 
 const recipientStatusMap: Record<
-  CampaignRecipientStatus,
+  CampaignRecipient["status"],
   { label: string; className: string }
 > = {
-  scheduled: {
-    label: "Agendado",
+  pending: {
+    label: "Pendente",
+    className: "border-slate-200 bg-slate-100 text-slate-700",
+  },
+  queued: {
+    label: "Na fila",
     className: "border-indigo-200 bg-indigo-50 text-indigo-700",
   },
   sent: {
@@ -242,240 +244,11 @@ const recipientStatusMap: Record<
     label: "Erro",
     className: "border-rose-200 bg-rose-50 text-rose-700",
   },
+  skipped: {
+    label: "Ignorado",
+    className: "border-stone-200 bg-stone-100 text-stone-700",
+  },
 };
-
-const initialTemplates: Template[] = [
-  {
-    id: "tpl-1",
-    internalName: "Boas-vindas premium",
-    metaName: "boas_vindas_premium",
-    category: "marketing",
-    language: "pt-BR",
-    status: "approved",
-    body:
-      "Olá, {{1}}. Preparamos uma condição especial para você conhecer nossos serviços com suporte dedicado.",
-    variablesExample: "{{1}} = Nome do contato",
-    footer: "Oferta válida por tempo limitado.",
-    buttons: ["Falar com consultor", "Ver detalhes"],
-    whatsappAccount: "WhatsApp Principal • +55 11 4000-1000",
-    updatedAt: "2026-04-28T10:15:00",
-  },
-  {
-    id: "tpl-2",
-    internalName: "Lembrete de renovação",
-    metaName: "lembrete_renovacao",
-    category: "utility",
-    language: "pt-BR",
-    status: "pending",
-    body:
-      "Olá, {{1}}. Sua renovação está próxima. Caso precise de apoio, nossa equipe está disponível para orientar os próximos passos.",
-    variablesExample: "{{1}} = Nome do contato",
-    footer: "Equipe de relacionamento",
-    buttons: ["Falar agora"],
-    whatsappAccount: "WhatsApp Financeiro • +55 11 4000-2000",
-    updatedAt: "2026-04-27T15:40:00",
-  },
-  {
-    id: "tpl-3",
-    internalName: "Código de verificação",
-    metaName: "codigo_verificacao_portal",
-    category: "authentication",
-    language: "pt-BR",
-    status: "approved",
-    body: "Seu código de verificação é {{1}}. Ele expira em {{2}} minutos.",
-    variablesExample: "{{1}} = Código | {{2}} = Tempo de expiração",
-    footer: "",
-    buttons: [],
-    whatsappAccount: "WhatsApp Login • +55 11 4000-3000",
-    updatedAt: "2026-04-25T08:20:00",
-  },
-  {
-    id: "tpl-4",
-    internalName: "Campanha de reativação",
-    metaName: "campanha_reativacao_abril",
-    category: "marketing",
-    language: "es",
-    status: "rejected",
-    body:
-      "Hola, {{1}}. Tenemos una nueva oportunidad para retomar su jornada con nuestro equipo.",
-    variablesExample: "{{1}} = Nombre del contacto",
-    footer: "Atención comercial",
-    buttons: ["Hablar con soporte"],
-    whatsappAccount: "WhatsApp LATAM • +55 11 4000-4000",
-    updatedAt: "2026-04-20T13:10:00",
-  },
-  {
-    id: "tpl-5",
-    internalName: "Oferta de upgrade anual",
-    metaName: "oferta_upgrade_anual",
-    category: "marketing",
-    language: "pt-BR",
-    status: "draft",
-    body:
-      "Olá, {{1}}. Seu plano pode evoluir com recursos extras para sua operação.",
-    variablesExample: "{{1}} = Nome do contato",
-    footer: "Consulte disponibilidade por conta.",
-    buttons: ["Quero conhecer"],
-    whatsappAccount: "WhatsApp Comercial • +55 11 4000-5000",
-    updatedAt: "2026-04-29T09:00:00",
-  },
-];
-
-const initialCampaigns: Campaign[] = [
-  {
-    id: "cmp-1",
-    name: "Upsell base ativa",
-    description: "Campanha com foco em clientes com uso recorrente.",
-    templateId: "tpl-1",
-    audienceType: "tag",
-    audienceLabel: "Contatos com tag Premium",
-    status: "sending",
-    sendMode: "now",
-    sendAt: "2026-04-30T09:30:00",
-    totalContacts: 420,
-    delivered: 378,
-    read: 241,
-    replied: 56,
-    failed: 14,
-    createdAt: "2026-04-30T08:50:00",
-    channelLabel: "WhatsApp Principal • +55 11 4000-1000",
-  },
-  {
-    id: "cmp-2",
-    name: "Renovação carteira abril",
-    description: "Ação de relacionamento com carteira em expiração.",
-    templateId: "tpl-1",
-    audienceType: "all",
-    audienceLabel: "Todos os contatos elegíveis",
-    status: "scheduled",
-    sendMode: "scheduled",
-    sendAt: "2026-05-02T14:00:00",
-    totalContacts: 860,
-    delivered: 0,
-    read: 0,
-    replied: 0,
-    failed: 0,
-    createdAt: "2026-04-29T16:10:00",
-    channelLabel: "WhatsApp Principal • +55 11 4000-1000",
-  },
-  {
-    id: "cmp-3",
-    name: "Onboarding portal seguro",
-    description: "Comunicado para novos acessos liberados.",
-    templateId: "tpl-3",
-    audienceType: "manual",
-    audienceLabel: "Seleção manual • 120 contatos",
-    status: "sent",
-    sendMode: "now",
-    sendAt: "2026-04-26T11:00:00",
-    totalContacts: 120,
-    delivered: 118,
-    read: 91,
-    replied: 17,
-    failed: 2,
-    createdAt: "2026-04-26T10:30:00",
-    channelLabel: "WhatsApp Login • +55 11 4000-3000",
-  },
-];
-
-const initialRecipients: CampaignRecipient[] = [
-  {
-    id: "rcp-1",
-    campaignId: "cmp-1",
-    name: "Mariana Costa",
-    phone: "+55 11 99999-0001",
-    status: "replied",
-    readAt: "2026-04-30T09:48:00",
-    replied: true,
-    conversation: "Solicitou detalhes do plano anual.",
-    error: null,
-  },
-  {
-    id: "rcp-2",
-    campaignId: "cmp-1",
-    name: "Carlos Nunes",
-    phone: "+55 11 99999-0002",
-    status: "read",
-    readAt: "2026-04-30T09:50:00",
-    replied: false,
-    conversation: "Ainda sem retorno.",
-    error: null,
-  },
-  {
-    id: "rcp-3",
-    campaignId: "cmp-1",
-    name: "Fernanda Lima",
-    phone: "+55 11 99999-0003",
-    status: "delivered",
-    readAt: null,
-    replied: false,
-    conversation: "Mensagem entregue.",
-    error: null,
-  },
-  {
-    id: "rcp-4",
-    campaignId: "cmp-1",
-    name: "Ricardo Alves",
-    phone: "+55 11 99999-0004",
-    status: "failed",
-    readAt: null,
-    replied: false,
-    conversation: "Não houve abertura de conversa.",
-    error: "Número sem opt-in válido.",
-  },
-  {
-    id: "rcp-5",
-    campaignId: "cmp-2",
-    name: "Patrícia Gomes",
-    phone: "+55 21 98888-1001",
-    status: "scheduled",
-    readAt: null,
-    replied: false,
-    conversation: "Envio programado.",
-    error: null,
-  },
-  {
-    id: "rcp-6",
-    campaignId: "cmp-2",
-    name: "Eduardo Salles",
-    phone: "+55 21 98888-1002",
-    status: "scheduled",
-    readAt: null,
-    replied: false,
-    conversation: "Envio programado.",
-    error: null,
-  },
-  {
-    id: "rcp-7",
-    campaignId: "cmp-3",
-    name: "Ana Júlia Dias",
-    phone: "+55 31 97777-2001",
-    status: "replied",
-    readAt: "2026-04-26T11:15:00",
-    replied: true,
-    conversation: "Confirmou recebimento do acesso.",
-    error: null,
-  },
-  {
-    id: "rcp-8",
-    campaignId: "cmp-3",
-    name: "Pedro Rocha",
-    phone: "+55 31 97777-2002",
-    status: "failed",
-    readAt: null,
-    replied: false,
-    conversation: "Falha de entrega.",
-    error: "Telefone inválido para o canal.",
-  },
-];
-
-const whatsappAccountOptions = [
-  "WhatsApp Principal • +55 11 4000-1000",
-  "WhatsApp Financeiro • +55 11 4000-2000",
-  "WhatsApp Login • +55 11 4000-3000",
-  "WhatsApp LATAM • +55 11 4000-4000",
-  "WhatsApp Comercial • +55 11 4000-5000",
-] as const;
 
 const normalizeMetaTemplateName = (value: string) => {
   const normalized = value
@@ -505,34 +278,162 @@ const defaultTemplateForm = (): TemplateFormState => ({
 const defaultCampaignForm = (): CampaignFormState => ({
   name: "",
   description: "",
-  channelLabel: "WhatsApp Principal • +55 11 4000-1000",
+  channelLabel: whatsappAccountOptions[0],
   templateId: "",
   audienceType: "all",
   tagLabel: "Clientes VIP",
   manualSelection: "",
   sendMode: "now",
-  scheduledAt: "2026-05-03T10:00",
+  scheduledAt: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
 });
 
-const formatDateTime = (value: string) =>
-  new Date(value).toLocaleString("pt-BR", {
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("pt-BR", {
     dateStyle: "short",
     timeStyle: "short",
   });
+};
 
 const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
 const makeRate = (value: number, total: number) =>
   total > 0 ? (value / total) * 100 : 0;
 
-const makeTemplateId = () =>
-  `tpl-${Math.random().toString(36).slice(2, 8).toLowerCase()}`;
+const parseStringList = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .map((item) =>
+          typeof item === "string"
+            ? item.trim()
+            : typeof item === "object" && item && "text" in item
+              ? String(item.text).trim()
+              : String(item ?? "").trim(),
+        )
+        .filter(Boolean)
+    : [];
 
-const makeCampaignId = () =>
-  `cmp-${Math.random().toString(36).slice(2, 8).toLowerCase()}`;
+const formatVariablesExample = (variables: unknown[]) =>
+  parseStringList(variables).join("\n");
 
-const makeRecipientId = () =>
-  `rcp-${Math.random().toString(36).slice(2, 8).toLowerCase()}`;
+const mapTemplateToView = (template: MessageTemplate): TemplateView => ({
+  id: template.id,
+  internalName: template.name,
+  metaName: template.meta_template_name ?? normalizeMetaTemplateName(template.name),
+  category: template.category,
+  language: template.language_code,
+  status: template.status,
+  body: template.body,
+  variablesExample: formatVariablesExample(template.variables),
+  footer: template.footer ?? "",
+  buttons: parseStringList(template.buttons),
+  whatsappAccount: template.whatsapp_number_id ?? whatsappAccountOptions[0],
+  updatedAt: template.updated_at,
+});
+
+const mapDbAudienceTypeToUi = (value: string): AudienceType => {
+  if (value === "tag") return "tag";
+  if (value === "manual_selection") return "manual";
+  return "all";
+};
+
+const mapUiAudienceTypeToDb = (value: AudienceType): ResolveAudienceType => {
+  if (value === "tag") return "tag";
+  if (value === "manual") return "manual_selection";
+  return "all_contacts";
+};
+
+const buildAudienceLabelFromFilters = (
+  audienceType: AudienceType,
+  audienceFilters: Record<string, unknown>,
+) => {
+  if (audienceType === "tag") {
+    return `Contatos com tag ${String(audienceFilters.tagLabel ?? "Clientes VIP")}`;
+  }
+
+  if (audienceType === "manual") {
+    return `Selecao manual • ${String(
+      audienceFilters.manualSelection ?? "Lote informado manualmente",
+    )}`;
+  }
+
+  return "Todos os contatos elegiveis";
+};
+
+const mapCampaignToView = (campaign: CampaignWithTemplate): CampaignView => {
+  const audienceType = mapDbAudienceTypeToUi(campaign.audience_type);
+  const audienceFilters = campaign.audience_filters ?? {};
+  const scheduledAt = campaign.scheduled_at;
+  const sendMode: DeliveryMode = scheduledAt ? "scheduled" : "now";
+
+  return {
+    id: campaign.id,
+    name: campaign.name,
+    description: campaign.description ?? "",
+    templateId: campaign.template_id,
+    audienceType,
+    audienceLabel:
+      String(audienceFilters.audienceLabel ?? "").trim() ||
+      buildAudienceLabelFromFilters(audienceType, audienceFilters),
+    status: campaign.status,
+    sendMode,
+    sendAt:
+      scheduledAt ??
+      campaign.started_at ??
+      campaign.finished_at ??
+      campaign.updated_at ??
+      campaign.created_at,
+    totalContacts: campaign.total_contacts,
+    delivered: campaign.total_delivered,
+    read: campaign.total_read,
+    replied: campaign.total_replied,
+    failed: campaign.total_failed,
+    createdAt: campaign.created_at,
+    channelLabel:
+      String(campaign.audience_filters?.channelLabel ?? "").trim() ||
+      campaign.whatsapp_number_id ||
+      whatsappAccountOptions[0],
+    template: campaign.template ? mapTemplateToView(campaign.template) : null,
+    audienceFilters,
+  };
+};
+
+const mapRecipientToView = (recipient: CampaignRecipient): CampaignRecipientView => ({
+  id: recipient.id,
+  campaignId: recipient.campaign_id,
+  name: recipient.contact?.name ?? recipient.phone ?? "Contato sem nome",
+  phone: recipient.phone ?? recipient.contact?.phone ?? "—",
+  status: recipient.status,
+  readAt: recipient.read_at,
+  replied: Boolean(recipient.replied_at),
+  conversation: recipient.conversation_id
+    ? `Conversa ${recipient.conversation_id.slice(0, 8)}`
+    : "Sem conversa vinculada",
+  error: recipient.error_message,
+});
+
+const buildAudienceLabel = (campaignForm: CampaignFormState) => {
+  if (campaignForm.audienceType === "tag") {
+    return `Contatos com tag ${campaignForm.tagLabel.trim() || "Clientes VIP"}`;
+  }
+
+  if (campaignForm.audienceType === "manual") {
+    return `Selecao manual • ${
+      campaignForm.manualSelection.trim() || "Lote informado manualmente"
+    }`;
+  }
+
+  return "Todos os contatos elegiveis";
+};
+
+const buildAudienceFilters = (campaignForm: CampaignFormState) => ({
+  audienceLabel: buildAudienceLabel(campaignForm),
+  tagLabel: campaignForm.tagLabel.trim() || null,
+  manualSelection: campaignForm.manualSelection.trim() || null,
+  channelLabel: campaignForm.channelLabel.trim() || whatsappAccountOptions[0],
+});
 
 const SummaryCard: React.FC<SummaryCardProps> = ({ label, value, hint }) => (
   <Card className="rounded-2xl p-5">
@@ -623,16 +524,59 @@ const Field = ({
   </label>
 );
 
+const EmptyState = ({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) => (
+  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+    <p className="text-base font-semibold text-slate-900">{title}</p>
+    <p className="mx-auto mt-2 max-w-2xl text-sm text-slate-500">{description}</p>
+    {action ? <div className="mt-5">{action}</div> : null}
+  </div>
+);
+
+const ErrorState = ({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) => (
+  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <span>{message}</span>
+      {onRetry ? (
+        <Button type="button" variant="ghost" onClick={onRetry}>
+          Tentar novamente
+        </Button>
+      ) : null}
+    </div>
+  </div>
+);
+
+const TableSkeleton = ({ rows = 4 }: { rows?: number }) => (
+  <div className="space-y-3">
+    {Array.from({ length: rows }).map((_, index) => (
+      <div
+        key={index}
+        className="h-14 animate-pulse rounded-2xl bg-slate-100"
+      />
+    ))}
+  </div>
+);
+
 const inputClassName =
   "mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
 
 export const MarketingCampaignsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<MarketingTab>("templates");
-  const [templates, setTemplates] = useState<Template[]>(initialTemplates);
-  const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
-  const [recipients, setRecipients] =
-    useState<CampaignRecipient[]>(initialRecipients);
+  const { clinicId, loading: clinicLoading } = useClinic();
 
+  const [activeTab, setActiveTab] = useState<MarketingTab>("templates");
   const [templateModalMode, setTemplateModalMode] = useState<
     "create" | "edit" | "view" | null
   >(null);
@@ -658,6 +602,75 @@ export const MarketingCampaignsPage: React.FC = () => {
     null,
   );
 
+  const {
+    templates: templateRows,
+    loading: templatesLoading,
+    saving: templatesSaving,
+    error: templatesError,
+    refetch: refetchTemplates,
+    createTemplate,
+    updateTemplate,
+    archiveTemplate,
+  } = useTemplates(clinicId);
+
+  const {
+    campaigns: campaignRows,
+    loading: campaignsLoading,
+    saving: campaignsSaving,
+    error: campaignsError,
+    refetch: refetchCampaigns,
+    createCampaign,
+    updateCampaign,
+    cancelCampaign,
+  } = useCampaigns(clinicId);
+
+  const { template: selectedTemplateDetail, loading: selectedTemplateLoading } =
+    useTemplate(clinicId, selectedTemplateId, {
+      enabled:
+        templateModalMode === "edit" || templateModalMode === "view",
+    });
+
+  const { campaign: selectedCampaignDetail, loading: selectedCampaignLoading } =
+    useCampaign(clinicId, selectedCampaignId, {
+      enabled: campaignModalMode === "edit",
+    });
+
+  const { campaign: metricsCampaignRow, loading: metricsCampaignLoading } =
+    useCampaign(clinicId, metricsCampaignId, {
+      enabled: Boolean(metricsCampaignId),
+    });
+
+  const {
+    recipients: metricsRecipientRows,
+    loading: metricsRecipientsLoading,
+    error: metricsRecipientsError,
+    refetch: refetchMetricsRecipients,
+  } = useCampaignRecipients(clinicId, metricsCampaignId, {
+    enabled: Boolean(metricsCampaignId),
+  });
+
+  const templates = useMemo(
+    () => templateRows.map(mapTemplateToView),
+    [templateRows],
+  );
+  const campaigns = useMemo(
+    () => campaignRows.map(mapCampaignToView),
+    [campaignRows],
+  );
+  const metricsCampaign = useMemo(
+    () => (metricsCampaignRow ? mapCampaignToView(metricsCampaignRow) : null),
+    [metricsCampaignRow],
+  );
+  const metricsRecipients = useMemo(
+    () => metricsRecipientRows.map(mapRecipientToView),
+    [metricsRecipientRows],
+  );
+
+  const approvedTemplates = useMemo(
+    () => templates.filter((item) => item.status === "approved"),
+    [templates],
+  );
+
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedTemplateId) ?? null,
     [selectedTemplateId, templates],
@@ -666,21 +679,6 @@ export const MarketingCampaignsPage: React.FC = () => {
   const selectedCampaign = useMemo(
     () => campaigns.find((item) => item.id === selectedCampaignId) ?? null,
     [campaigns, selectedCampaignId],
-  );
-
-  const metricsCampaign = useMemo(
-    () => campaigns.find((item) => item.id === metricsCampaignId) ?? null,
-    [campaigns, metricsCampaignId],
-  );
-
-  const approvedTemplates = useMemo(
-    () => templates.filter((item) => item.status === "approved"),
-    [templates],
-  );
-
-  const metricsRecipients = useMemo(
-    () => recipients.filter((item) => item.campaignId === metricsCampaignId),
-    [metricsCampaignId, recipients],
   );
 
   const selectedCampaignTemplate = useMemo(
@@ -721,6 +719,54 @@ export const MarketingCampaignsPage: React.FC = () => {
     };
   }, [campaigns]);
 
+  const audiencePreview = useAudiencePreview(
+    clinicId,
+    {
+      audienceType: mapUiAudienceTypeToDb(campaignForm.audienceType),
+      audienceFilters: buildAudienceFilters(campaignForm),
+    },
+    { enabled: Boolean(campaignModalMode) && Boolean(clinicId) },
+  );
+
+  useEffect(() => {
+    if (!templateModalMode || !selectedTemplateDetail) return;
+    const template = mapTemplateToView(selectedTemplateDetail);
+
+    setTemplateForm({
+      internalName: template.internalName,
+      metaName: template.metaName,
+      category: template.category,
+      language: template.language,
+      body: template.body,
+      variablesExample: template.variablesExample,
+      footer: template.footer,
+      buttonsText: template.buttons.join("\n"),
+      whatsappAccount: template.whatsappAccount,
+    });
+    setMetaNameManuallyEdited(true);
+  }, [selectedTemplateDetail, templateModalMode]);
+
+  useEffect(() => {
+    if (campaignModalMode !== "edit" || !selectedCampaignDetail) return;
+    const campaign = mapCampaignToView(selectedCampaignDetail);
+
+    setCampaignForm({
+      name: campaign.name,
+      description: campaign.description,
+      channelLabel: campaign.channelLabel,
+      templateId: campaign.templateId,
+      audienceType: campaign.audienceType,
+      tagLabel: String(campaign.audienceFilters.tagLabel ?? "Clientes VIP"),
+      manualSelection: String(campaign.audienceFilters.manualSelection ?? ""),
+      sendMode: campaign.sendMode,
+      scheduledAt:
+        campaign.sendMode === "scheduled"
+          ? campaign.sendAt.slice(0, 16)
+          : defaultCampaignForm().scheduledAt,
+    });
+    setCampaignStep(1);
+  }, [campaignModalMode, selectedCampaignDetail]);
+
   const resetTemplateForm = () => {
     setTemplateForm(defaultTemplateForm());
     setSelectedTemplateId(null);
@@ -737,7 +783,7 @@ export const MarketingCampaignsPage: React.FC = () => {
 
   const openTemplateModal = (
     mode: "create" | "edit" | "view",
-    template?: Template,
+    template?: TemplateView,
   ) => {
     if (template) {
       setSelectedTemplateId(template.id);
@@ -745,7 +791,7 @@ export const MarketingCampaignsPage: React.FC = () => {
         internalName: template.internalName,
         metaName: template.metaName,
         category: template.category,
-        language: "pt-BR",
+        language: template.language,
         body: template.body,
         variablesExample: template.variablesExample,
         footer: template.footer,
@@ -764,7 +810,7 @@ export const MarketingCampaignsPage: React.FC = () => {
 
   const openCampaignModal = (
     mode: "create" | "edit",
-    campaign?: Campaign,
+    campaign?: CampaignView,
   ) => {
     if (campaign) {
       setSelectedCampaignId(campaign.id);
@@ -774,14 +820,8 @@ export const MarketingCampaignsPage: React.FC = () => {
         channelLabel: campaign.channelLabel,
         templateId: campaign.templateId,
         audienceType: campaign.audienceType,
-        tagLabel:
-          campaign.audienceType === "tag"
-            ? campaign.audienceLabel.replace("Contatos com tag ", "")
-            : "Clientes VIP",
-        manualSelection:
-          campaign.audienceType === "manual"
-            ? campaign.audienceLabel.replace("Seleção manual • ", "")
-            : "",
+        tagLabel: String(campaign.audienceFilters.tagLabel ?? "Clientes VIP"),
+        manualSelection: String(campaign.audienceFilters.manualSelection ?? ""),
         sendMode: campaign.sendMode,
         scheduledAt:
           campaign.sendMode === "scheduled"
@@ -820,270 +860,182 @@ export const MarketingCampaignsPage: React.FC = () => {
     }));
   };
 
-  const handleSaveTemplate = () => {
-    const now = new Date().toISOString();
-    const nextTemplate: Template = {
-      id: selectedTemplateId ?? makeTemplateId(),
-      internalName: templateForm.internalName.trim() || "Novo template",
-      metaName: normalizeMetaTemplateName(
+  const handleSaveTemplate = async () => {
+    if (!clinicId) {
+      toast.error("Clinica nao identificada.");
+      return;
+    }
+
+    const payload = {
+      whatsapp_number_id: templateForm.whatsappAccount.trim() || null,
+      name: templateForm.internalName.trim() || "Novo template",
+      meta_template_name: normalizeMetaTemplateName(
         templateForm.metaName.trim() || templateForm.internalName.trim(),
       ),
       category: templateForm.category,
-      language: "pt-BR",
-      status:
-        selectedTemplate?.status && templateModalMode === "edit"
-          ? selectedTemplate.status
-          : "draft",
+      language_code: templateForm.language,
       body: templateForm.body.trim(),
-      variablesExample: templateForm.variablesExample.trim(),
-      footer: templateForm.footer.trim(),
+      variables: templateForm.variablesExample
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean),
+      footer: templateForm.footer.trim() || null,
       buttons: templateForm.buttonsText
         .split("\n")
         .map((item) => item.trim())
         .filter(Boolean),
-      whatsappAccount: templateForm.whatsappAccount.trim(),
-      updatedAt: now,
+      status:
+        templateModalMode === "edit" && selectedTemplate
+          ? selectedTemplate.status
+          : ("draft" as const),
     };
 
-    setTemplates((current) => {
+    try {
       if (templateModalMode === "edit" && selectedTemplateId) {
-        return current.map((item) =>
-          item.id === selectedTemplateId ? nextTemplate : item,
-        );
+        await updateTemplate(selectedTemplateId, payload);
+        toast.success("Template atualizado com sucesso.");
+      } else {
+        await createTemplate(payload);
+        toast.success("Template criado com sucesso.");
       }
 
-      return [nextTemplate, ...current];
-    });
-
-    resetTemplateForm();
+      resetTemplateForm();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Nao foi possivel salvar o template.",
+      );
+    }
   };
 
-  const handleTemplateAction = (
+  const handleTemplateAction = async (
     action: "submit" | "duplicate" | "archive",
-    template: Template,
+    template: TemplateView,
   ) => {
-    if (action === "submit") {
-      setTemplates((current) =>
-        current.map((item) =>
-          item.id === template.id
-            ? {
-                ...item,
-                status: "submitted",
-                updatedAt: new Date().toISOString(),
-              }
-            : item,
-        ),
+    try {
+      if (action === "submit") {
+        await updateTemplate(template.id, {
+          status: "submitted",
+        });
+        toast.success("Template enviado para revisao interna.");
+        return;
+      }
+
+      if (action === "archive") {
+        await archiveTemplate(template.id);
+        toast.success("Template arquivado.");
+        return;
+      }
+
+      await createTemplate({
+        whatsapp_number_id: template.whatsappAccount,
+        name: `${template.internalName} • Copia`,
+        meta_template_name: `${template.metaName}_copia`,
+        category: template.category,
+        language_code: template.language,
+        body: template.body,
+        variables: template.variablesExample
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        footer: template.footer || null,
+        buttons: template.buttons,
+        status: "draft",
+      });
+      toast.success("Copia do template criada.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Nao foi possivel concluir a acao.",
       );
+    }
+  };
+
+  const handleSaveCampaign = async () => {
+    if (!clinicId) {
+      toast.error("Clinica nao identificada.");
       return;
     }
 
-    if (action === "archive") {
-      setTemplates((current) =>
-        current.map((item) =>
-          item.id === template.id
-            ? {
-                ...item,
-                status: "archived",
-                updatedAt: new Date().toISOString(),
-              }
-            : item,
-        ),
-      );
-      return;
-    }
-
-    const duplicatedTemplate: Template = {
-      ...template,
-      id: makeTemplateId(),
-      internalName: `${template.internalName} • Cópia`,
-      metaName: `${template.metaName}_copia`,
-      status: "draft",
-      updatedAt: new Date().toISOString(),
-    };
-
-    setTemplates((current) => [duplicatedTemplate, ...current]);
-  };
-
-  const buildAudienceLabel = () => {
-    if (campaignForm.audienceType === "tag") {
-      return `Contatos com tag ${campaignForm.tagLabel.trim() || "Clientes VIP"}`;
-    }
-
-    if (campaignForm.audienceType === "manual") {
-      return `Seleção manual • ${
-        campaignForm.manualSelection.trim() || "30 contatos"
-      }`;
-    }
-
-    return "Todos os contatos elegíveis";
-  };
-
-  const estimateAudienceSize = () => {
-    if (campaignForm.audienceType === "tag") return 240;
-    if (campaignForm.audienceType === "manual") return 45;
-    return 820;
-  };
-
-  const createMockRecipients = (
-    campaignId: string,
-    template: Template,
-    total: number,
-    mode: DeliveryMode,
-  ): CampaignRecipient[] => {
-    const baseNames = [
-      "João Martins",
-      "Beatriz Melo",
-      "Sofia Ribeiro",
-      "Marcelo Prado",
-      "Camila Torres",
-    ];
-
-    return baseNames.map((name, index) => {
-      const status: CampaignRecipientStatus =
-        mode === "scheduled"
-          ? "scheduled"
-          : index === 0
-            ? "replied"
-            : index === 1
-              ? "read"
-              : index === 2
-                ? "delivered"
-                : index === 3
-                  ? "sent"
-                  : "failed";
-
-      return {
-        id: makeRecipientId(),
-        campaignId,
-        name,
-        phone: `+55 11 98888-10${index}`,
-        status,
-        readAt:
-          status === "read" || status === "replied"
-            ? new Date().toISOString()
-            : null,
-        replied: status === "replied",
-        conversation:
-          status === "replied"
-            ? `Interagiu com o template ${template.internalName}.`
-            : `Recebeu a campanha de ${total} contatos.`,
-        error: status === "failed" ? "Contato sem janela elegível." : null,
-      };
-    });
-  };
-
-  const handleSaveCampaign = () => {
     const template = approvedTemplates.find(
       (item) => item.id === campaignForm.templateId,
     );
 
-    if (!template) return;
-
-    const isScheduled = campaignForm.sendMode === "scheduled";
-    const totalContacts = estimateAudienceSize();
-    const delivered = isScheduled ? 0 : Math.round(totalContacts * 0.88);
-    const read = isScheduled ? 0 : Math.round(totalContacts * 0.59);
-    const replied = isScheduled ? 0 : Math.round(totalContacts * 0.12);
-    const failed = isScheduled ? 0 : Math.max(totalContacts - delivered, 0);
-    const now = new Date().toISOString();
-    const sendAt = isScheduled
-      ? new Date(campaignForm.scheduledAt).toISOString()
-      : now;
-
-    const nextCampaign: Campaign = {
-      id: selectedCampaignId ?? makeCampaignId(),
-      name: campaignForm.name.trim() || "Nova campanha",
-      description: campaignForm.description.trim(),
-      templateId: template.id,
-      audienceType: campaignForm.audienceType,
-      audienceLabel: buildAudienceLabel(),
-      status: isScheduled ? "scheduled" : "sending",
-      sendMode: campaignForm.sendMode,
-      sendAt,
-      totalContacts,
-      delivered,
-      read,
-      replied,
-      failed,
-      createdAt: selectedCampaign?.createdAt ?? now,
-      channelLabel: campaignForm.channelLabel.trim(),
-    };
-
-    setCampaigns((current) => {
-      if (campaignModalMode === "edit" && selectedCampaignId) {
-        return current.map((item) =>
-          item.id === selectedCampaignId ? nextCampaign : item,
-        );
-      }
-
-      return [nextCampaign, ...current];
-    });
-
-    if (campaignModalMode === "edit" && selectedCampaignId) {
-      setRecipients((current) => [
-        ...current.filter((item) => item.campaignId !== selectedCampaignId),
-        ...createMockRecipients(
-          selectedCampaignId,
-          template,
-          totalContacts,
-          campaignForm.sendMode,
-        ),
-      ]);
-    } else {
-      setRecipients((current) => [
-        ...createMockRecipients(
-          nextCampaign.id,
-          template,
-          totalContacts,
-          campaignForm.sendMode,
-        ),
-        ...current,
-      ]);
+    if (!template) {
+      toast.error("Selecione um template aprovado para continuar.");
+      return;
     }
 
-    resetCampaignForm();
-    setActiveTab("campaigns");
-  };
+    const isScheduled = campaignForm.sendMode === "scheduled";
+    const scheduledAt =
+      isScheduled && campaignForm.scheduledAt
+        ? new Date(campaignForm.scheduledAt).toISOString()
+        : null;
 
-  const handleDuplicateCampaign = (campaign: Campaign) => {
-    const duplicated: Campaign = {
-      ...campaign,
-      id: makeCampaignId(),
-      name: `${campaign.name} • Cópia`,
-      status: "draft",
-      sendMode: "scheduled",
-      sendAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      delivered: 0,
-      read: 0,
-      replied: 0,
-      failed: 0,
+    const payload = {
+      template_id: template.id,
+      whatsapp_number_id: campaignForm.channelLabel.trim() || null,
+      name: campaignForm.name.trim() || "Nova campanha",
+      description: campaignForm.description.trim() || null,
+      status: isScheduled ? ("scheduled" as const) : ("sending" as const),
+      audience_type: mapUiAudienceTypeToDb(campaignForm.audienceType),
+      audience_filters: buildAudienceFilters(campaignForm),
+      scheduled_at: scheduledAt,
+      started_at: isScheduled ? null : new Date().toISOString(),
+      finished_at: null,
     };
 
-    setCampaigns((current) => [duplicated, ...current]);
-    setRecipients((current) => [
-      ...current.filter((item) => item.campaignId !== duplicated.id),
-      ...current
-        .filter((item) => item.campaignId === campaign.id)
-        .map((item) => ({
-          ...item,
-          id: makeRecipientId(),
-          campaignId: duplicated.id,
-          status: "scheduled" as CampaignRecipientStatus,
-          readAt: null,
-          replied: false,
-          error: null,
-          conversation: "Cópia preparada para revisão antes do envio.",
-        })),
-    ]);
+    try {
+      if (campaignModalMode === "edit" && selectedCampaignId) {
+        await updateCampaign(selectedCampaignId, payload);
+        toast.success("Campanha atualizada com sucesso.");
+      } else {
+        await createCampaign(payload);
+        toast.success("Campanha criada e destinatarios gerados.");
+      }
+
+      resetCampaignForm();
+      setActiveTab("campaigns");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Nao foi possivel salvar a campanha.",
+      );
+    }
   };
 
-  const handleCancelCampaign = (campaignId: string) => {
-    setCampaigns((current) =>
-      current.map((item) =>
-        item.id === campaignId ? { ...item, status: "cancelled" } : item,
-      ),
-    );
+  const handleDuplicateCampaign = async (campaign: CampaignView) => {
+    try {
+      await createCampaign({
+        template_id: campaign.templateId,
+        whatsapp_number_id: campaign.channelLabel,
+        name: `${campaign.name} • Copia`,
+        description: campaign.description || null,
+        status: "draft",
+        audience_type: mapUiAudienceTypeToDb(campaign.audienceType),
+        audience_filters: {
+          ...campaign.audienceFilters,
+          audienceLabel: campaign.audienceLabel,
+          channelLabel: campaign.channelLabel,
+        },
+        scheduled_at: null,
+        started_at: null,
+        finished_at: null,
+      });
+      toast.success("Copia da campanha criada.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Nao foi possivel duplicar a campanha.",
+      );
+    }
+  };
+
+  const handleCancelCampaign = async (campaignId: string) => {
+    try {
+      await cancelCampaign(campaignId);
+      toast.success("Campanha cancelada.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Nao foi possivel cancelar a campanha.",
+      );
+    }
   };
 
   const canAdvanceCampaignStep = () => {
@@ -1112,6 +1064,25 @@ export const MarketingCampaignsPage: React.FC = () => {
     return true;
   };
 
+  if (clinicLoading) {
+    return (
+      <div className="flex h-full flex-col bg-slate-50 px-8 py-8">
+        <TableSkeleton rows={6} />
+      </div>
+    );
+  }
+
+  if (!clinicId) {
+    return (
+      <div className="flex h-full flex-col bg-slate-50 px-8 py-8">
+        <EmptyState
+          title="Clinica nao identificada"
+          description="Aguarde o carregamento da clinica atual para gerenciar templates e campanhas."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col bg-slate-50">
       <div className="border-b bg-white px-8 py-6">
@@ -1123,8 +1094,8 @@ export const MarketingCampaignsPage: React.FC = () => {
                 Marketing / Campanhas
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Crie modelos aprovados pela Meta e envie campanhas segmentadas
-                para seus contatos.
+                Campanhas com modelos aprovados pela Meta, publicos segmentados
+                e metricas de entrega, leitura e respostas.
               </p>
             </div>
           </div>
@@ -1158,7 +1129,7 @@ export const MarketingCampaignsPage: React.FC = () => {
               <SummaryCard
                 label="Total de templates"
                 value={String(templateSummary.total)}
-                hint="Biblioteca ativa da operação."
+                hint="Biblioteca ativa da operacao."
               />
               <SummaryCard
                 label="Aprovados"
@@ -1166,14 +1137,14 @@ export const MarketingCampaignsPage: React.FC = () => {
                 hint="Prontos para uso em campanhas."
               />
               <SummaryCard
-                label="Em análise"
+                label="Em analise"
                 value={String(templateSummary.pending)}
-                hint="Aguardando validação da Meta."
+                hint="Aguardando validacao."
               />
               <SummaryCard
                 label="Rejeitados"
                 value={String(templateSummary.rejected)}
-                hint="Precisam de revisão antes do reenvio."
+                hint="Precisam de revisao."
               />
             </div>
 
@@ -1184,8 +1155,8 @@ export const MarketingCampaignsPage: React.FC = () => {
                     Campanhas com modelos aprovados pela Meta
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Organize os modelos por categoria, idioma e conta
-                    vinculada antes de publicar em produção.
+                    Organize os modelos por categoria, idioma e conta vinculada
+                    antes de publicar em producao.
                   </p>
                 </div>
 
@@ -1201,84 +1172,105 @@ export const MarketingCampaignsPage: React.FC = () => {
                 </Button>
               </div>
 
-              <div className="mt-6 overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead>
-                    <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="pb-3 pr-4">Nome</th>
-                      <th className="pb-3 pr-4">Categoria</th>
-                      <th className="pb-3 pr-4">Idioma</th>
-                      <th className="pb-3 pr-4">Status</th>
-                      <th className="pb-3 pr-4">Última atualização</th>
-                      <th className="pb-3">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {templates.map((template) => (
-                      <tr key={template.id} className="align-top">
-                        <td className="py-4 pr-4">
-                          <div>
-                            <p className="font-medium text-slate-900">
-                              {template.internalName}
-                            </p>
-                            <p className="mt-1 text-sm text-slate-500">
-                              Meta: {template.metaName}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-600">
-                          {templateCategoryMap[template.category]}
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-600">
-                          {template.language}
-                        </td>
-                        <td className="py-4 pr-4">
-                          <StatusBadge {...templateStatusMap[template.status]} />
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-600">
-                          {formatDateTime(template.updatedAt)}
-                        </td>
-                        <td className="py-4">
-                          <div className="flex min-w-[320px] flex-wrap gap-x-4 gap-y-2">
-                            <TableAction
-                              label="Visualizar"
-                              onClick={() => openTemplateModal("view", template)}
-                            />
-                            <TableAction
-                              label="Editar"
-                              onClick={() => openTemplateModal("edit", template)}
-                            />
-                            <TableAction
-                              label="Enviar para Meta"
-                              onClick={() =>
-                                handleTemplateAction("submit", template)
-                              }
-                              disabled={
-                                template.status === "approved" ||
-                                template.status === "pending" ||
-                                template.status === "submitted" ||
-                                template.status === "archived"
-                              }
-                            />
-                            <TableAction
-                              label="Duplicar"
-                              onClick={() =>
-                                handleTemplateAction("duplicate", template)
-                              }
-                            />
-                            <TableAction
-                              label="Arquivar"
-                              onClick={() =>
-                                handleTemplateAction("archive", template)
-                              }
-                              disabled={template.status === "archived"}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="mt-6">
+                {templatesError ? (
+                  <ErrorState
+                    message={templatesError}
+                    onRetry={refetchTemplates}
+                  />
+                ) : templatesLoading ? (
+                  <TableSkeleton />
+                ) : templates.length === 0 ? (
+                  <EmptyState
+                    title="Nenhum template cadastrado"
+                    description="Crie o primeiro template para estruturar sua base de campanhas."
+                  />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200">
+                      <thead>
+                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          <th className="pb-3 pr-4">Nome</th>
+                          <th className="pb-3 pr-4">Categoria</th>
+                          <th className="pb-3 pr-4">Idioma</th>
+                          <th className="pb-3 pr-4">Status</th>
+                          <th className="pb-3 pr-4">Ultima atualizacao</th>
+                          <th className="pb-3">Acoes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {templates.map((template) => (
+                          <tr key={template.id} className="align-top">
+                            <td className="py-4 pr-4">
+                              <div>
+                                <p className="font-medium text-slate-900">
+                                  {template.internalName}
+                                </p>
+                                <p className="mt-1 text-sm text-slate-500">
+                                  Meta: {template.metaName}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="py-4 pr-4 text-sm text-slate-600">
+                              {templateCategoryMap[template.category]}
+                            </td>
+                            <td className="py-4 pr-4 text-sm text-slate-600">
+                              {template.language}
+                            </td>
+                            <td className="py-4 pr-4">
+                              <StatusBadge {...templateStatusMap[template.status]} />
+                            </td>
+                            <td className="py-4 pr-4 text-sm text-slate-600">
+                              {formatDateTime(template.updatedAt)}
+                            </td>
+                            <td className="py-4">
+                              <div className="flex min-w-[320px] flex-wrap gap-x-4 gap-y-2">
+                                <TableAction
+                                  label="Visualizar"
+                                  onClick={() => openTemplateModal("view", template)}
+                                />
+                                <TableAction
+                                  label="Editar"
+                                  onClick={() => openTemplateModal("edit", template)}
+                                />
+                                <TableAction
+                                  label="Enviar para Meta"
+                                  onClick={() =>
+                                    handleTemplateAction("submit", template)
+                                  }
+                                  disabled={
+                                    templatesSaving ||
+                                    template.status === "approved" ||
+                                    template.status === "pending" ||
+                                    template.status === "submitted" ||
+                                    template.status === "archived"
+                                  }
+                                />
+                                <TableAction
+                                  label="Duplicar"
+                                  onClick={() =>
+                                    handleTemplateAction("duplicate", template)
+                                  }
+                                  disabled={templatesSaving}
+                                />
+                                <TableAction
+                                  label="Arquivar"
+                                  onClick={() =>
+                                    handleTemplateAction("archive", template)
+                                  }
+                                  disabled={
+                                    templatesSaving ||
+                                    template.status === "archived"
+                                  }
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -1288,17 +1280,17 @@ export const MarketingCampaignsPage: React.FC = () => {
               <SummaryCard
                 label="Campanhas ativas"
                 value={String(campaignSummary.active)}
-                hint="Em execução neste momento."
+                hint="Preparadas nesta operacao."
               />
               <SummaryCard
                 label="Agendadas"
                 value={String(campaignSummary.scheduled)}
-                hint="Prontas para o próximo envio."
+                hint="Prontas para a proxima janela."
               />
               <SummaryCard
-                label="Enviadas"
+                label="Concluidas"
                 value={String(campaignSummary.sent)}
-                hint="Histórico recente de campanhas concluídas."
+                hint="Historico recente de campanhas."
               />
               <SummaryCard
                 label="Respostas geradas"
@@ -1311,7 +1303,7 @@ export const MarketingCampaignsPage: React.FC = () => {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">
-                    Envie mensagens para públicos segmentados
+                    Envie mensagens para publicos segmentados
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
                     Selecione apenas templates aprovados e acompanhe entrega,
@@ -1334,100 +1326,119 @@ export const MarketingCampaignsPage: React.FC = () => {
 
               {approvedTemplates.length === 0 ? (
                 <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  Nenhum template aprovado está disponível no momento. Crie ou
+                  Nenhum template aprovado esta disponivel no momento. Crie ou
                   aprove um modelo antes de montar a campanha.
                 </div>
               ) : null}
 
-              <div className="mt-6 overflow-x-auto">
-                <table className="min-w-[1200px] divide-y divide-slate-200">
-                  <thead>
-                    <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="pb-3 pr-4">Nome</th>
-                      <th className="pb-3 pr-4">Template usado</th>
-                      <th className="pb-3 pr-4">Público</th>
-                      <th className="pb-3 pr-4">Status</th>
-                      <th className="pb-3 pr-4">Envio</th>
-                      <th className="pb-3 pr-4">Total</th>
-                      <th className="pb-3 pr-4">Entregues</th>
-                      <th className="pb-3 pr-4">Lidas</th>
-                      <th className="pb-3 pr-4">Respostas</th>
-                      <th className="pb-3">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {campaigns.map((campaign) => {
-                      const template = templates.find(
-                        (item) => item.id === campaign.templateId,
-                      );
-                      const canCancel =
-                        campaign.status === "draft" ||
-                        campaign.status === "scheduled" ||
-                        campaign.status === "sending";
-
-                      return (
-                        <tr key={campaign.id} className="align-top">
-                          <td className="py-4 pr-4">
-                            <div>
-                              <p className="font-medium text-slate-900">
-                                {campaign.name}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-500">
-                                {campaign.channelLabel}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="py-4 pr-4 text-sm text-slate-600">
-                            {template?.internalName ?? "Template removido"}
-                          </td>
-                          <td className="py-4 pr-4 text-sm text-slate-600">
-                            {campaign.audienceLabel}
-                          </td>
-                          <td className="py-4 pr-4">
-                            <StatusBadge {...campaignStatusMap[campaign.status]} />
-                          </td>
-                          <td className="py-4 pr-4 text-sm text-slate-600">
-                            {formatDateTime(campaign.sendAt)}
-                          </td>
-                          <td className="py-4 pr-4 text-sm text-slate-600">
-                            {campaign.totalContacts}
-                          </td>
-                          <td className="py-4 pr-4 text-sm text-slate-600">
-                            {campaign.delivered}
-                          </td>
-                          <td className="py-4 pr-4 text-sm text-slate-600">
-                            {campaign.read}
-                          </td>
-                          <td className="py-4 pr-4 text-sm text-slate-600">
-                            {campaign.replied}
-                          </td>
-                          <td className="py-4">
-                            <div className="flex min-w-[290px] flex-wrap gap-x-4 gap-y-2">
-                              <TableAction
-                                label="Ver métricas"
-                                onClick={() => setMetricsCampaignId(campaign.id)}
-                              />
-                              <TableAction
-                                label="Editar"
-                                onClick={() => openCampaignModal("edit", campaign)}
-                              />
-                              <TableAction
-                                label="Duplicar"
-                                onClick={() => handleDuplicateCampaign(campaign)}
-                              />
-                              <TableAction
-                                label="Cancelar"
-                                onClick={() => handleCancelCampaign(campaign.id)}
-                                tone="danger"
-                                disabled={!canCancel}
-                              />
-                            </div>
-                          </td>
+              <div className="mt-6">
+                {campaignsError ? (
+                  <ErrorState
+                    message={campaignsError}
+                    onRetry={refetchCampaigns}
+                  />
+                ) : campaignsLoading ? (
+                  <TableSkeleton />
+                ) : campaigns.length === 0 ? (
+                  <EmptyState
+                    title="Nenhuma campanha criada"
+                    description="Assim que uma campanha for criada, os destinatarios serao gerados automaticamente e as metricas passarao a refletir os dados do banco."
+                  />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[1200px] divide-y divide-slate-200">
+                      <thead>
+                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          <th className="pb-3 pr-4">Nome</th>
+                          <th className="pb-3 pr-4">Template usado</th>
+                          <th className="pb-3 pr-4">Publico</th>
+                          <th className="pb-3 pr-4">Status</th>
+                          <th className="pb-3 pr-4">Envio</th>
+                          <th className="pb-3 pr-4">Total</th>
+                          <th className="pb-3 pr-4">Entregues</th>
+                          <th className="pb-3 pr-4">Lidas</th>
+                          <th className="pb-3 pr-4">Respostas</th>
+                          <th className="pb-3">Acoes</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {campaigns.map((campaign) => {
+                          const canCancel =
+                            campaign.status === "draft" ||
+                            campaign.status === "scheduled" ||
+                            campaign.status === "sending";
+
+                          return (
+                            <tr key={campaign.id} className="align-top">
+                              <td className="py-4 pr-4">
+                                <div>
+                                  <p className="font-medium text-slate-900">
+                                    {campaign.name}
+                                  </p>
+                                  <p className="mt-1 text-sm text-slate-500">
+                                    {campaign.channelLabel}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {campaign.template?.internalName ??
+                                  "Template removido"}
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {campaign.audienceLabel}
+                              </td>
+                              <td className="py-4 pr-4">
+                                <StatusBadge {...campaignStatusMap[campaign.status]} />
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {formatDateTime(campaign.sendAt)}
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {campaign.totalContacts}
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {campaign.delivered}
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {campaign.read}
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {campaign.replied}
+                              </td>
+                              <td className="py-4">
+                                <div className="flex min-w-[290px] flex-wrap gap-x-4 gap-y-2">
+                                  <TableAction
+                                    label="Ver metricas"
+                                    onClick={() => setMetricsCampaignId(campaign.id)}
+                                  />
+                                  <TableAction
+                                    label="Editar"
+                                    onClick={() => openCampaignModal("edit", campaign)}
+                                  />
+                                  <TableAction
+                                    label="Duplicar"
+                                    onClick={() =>
+                                      handleDuplicateCampaign(campaign)
+                                    }
+                                    disabled={campaignsSaving}
+                                  />
+                                  <TableAction
+                                    label="Cancelar"
+                                    onClick={() =>
+                                      handleCancelCampaign(campaign.id)
+                                    }
+                                    tone="danger"
+                                    disabled={!canCancel || campaignsSaving}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -1443,12 +1454,16 @@ export const MarketingCampaignsPage: React.FC = () => {
                 ? "Editar template"
                 : "Visualizar template"
           }
-          subtitle="Estruture o modelo com os campos usados pela Meta e mantenha o conteúdo pronto para revisão."
+          subtitle="Estruture o modelo com os campos usados pela operacao e mantenha o conteudo pronto para revisao."
           onClose={resetTemplateForm}
           widthClassName="max-w-4xl"
         >
           <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-4">
+              {selectedTemplateId && selectedTemplateLoading ? (
+                <TableSkeleton rows={3} />
+              ) : null}
+
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="Nome interno">
                   <input
@@ -1459,10 +1474,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                         templateForm.internalName,
                       );
 
-                      handleTemplateFieldChange(
-                        "internalName",
-                        nextInternalName,
-                      );
+                      handleTemplateFieldChange("internalName", nextInternalName);
 
                       if (
                         !metaNameManuallyEdited ||
@@ -1478,7 +1490,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                     }}
                     disabled={templateModalMode === "view"}
                     className={inputClassName}
-                    placeholder="Ex: Reativação carteira premium"
+                    placeholder="Ex: Reativacao carteira premium"
                   />
                 </Field>
                 <Field label="Nome do template na Meta">
@@ -1502,7 +1514,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                     onChange={(event) =>
                       handleTemplateFieldChange(
                         "category",
-                        event.target.value as TemplateCategory,
+                        event.target.value as MessageTemplateCategory,
                       )
                     }
                     disabled={templateModalMode === "view"}
@@ -1523,7 +1535,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                     className={inputClassName}
                   />
                 </Field>
-                <Field label="Número/conta vinculada">
+                <Field label="Numero/conta vinculada">
                   <select
                     value={templateForm.whatsappAccount}
                     onChange={(event) =>
@@ -1561,7 +1573,7 @@ export const MarketingCampaignsPage: React.FC = () => {
               </Field>
 
               <Field
-                label="Variáveis/exemplos"
+                label="Variaveis/exemplos"
                 hint="Exemplo: {{1}} = Nome do contato | {{2}} = Data agendada"
               >
                 <textarea
@@ -1575,12 +1587,12 @@ export const MarketingCampaignsPage: React.FC = () => {
                   disabled={templateModalMode === "view"}
                   rows={3}
                   className={inputClassName}
-                  placeholder="Descreva o uso das variáveis para revisão interna."
+                  placeholder="Descreva o uso das variaveis para revisao interna."
                 />
               </Field>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Rodapé opcional">
+                <Field label="Rodape opcional">
                   <textarea
                     value={templateForm.footer}
                     onChange={(event) =>
@@ -1593,8 +1605,8 @@ export const MarketingCampaignsPage: React.FC = () => {
                   />
                 </Field>
                 <Field
-                  label="Botões opcionais"
-                  hint="Use uma linha por botão. Exemplo: Falar com consultor"
+                  label="Botoes opcionais"
+                  hint="Use uma linha por botao. Exemplo: Falar com consultor"
                 >
                   <textarea
                     value={templateForm.buttonsText}
@@ -1622,7 +1634,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                   </p>
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                     {templateForm.body ||
-                      "A prévia da mensagem aparecerá aqui conforme os campos forem preenchidos."}
+                      "A previa da mensagem aparecera aqui conforme os campos forem preenchidos."}
                   </p>
                   {templateForm.footer ? (
                     <p className="mt-3 text-xs text-slate-400">
@@ -1652,7 +1664,7 @@ export const MarketingCampaignsPage: React.FC = () => {
               <div className="mt-5 space-y-3 text-sm text-slate-600">
                 <div className="flex items-center gap-2">
                   <CheckCircle2Icon className="h-4 w-4 text-emerald-600" />
-                  Conteúdo pronto para revisão antes do envio à Meta.
+                  Conteudo pronto para revisao antes de qualquer integracao externa.
                 </div>
               </div>
             </Card>
@@ -1667,9 +1679,10 @@ export const MarketingCampaignsPage: React.FC = () => {
                 type="button"
                 onClick={handleSaveTemplate}
                 className="rounded-full"
+                disabled={templatesSaving}
               >
                 {templateModalMode === "edit"
-                  ? "Salvar alterações"
+                  ? "Salvar alteracoes"
                   : "Criar template"}
               </Button>
             ) : null}
@@ -1680,9 +1693,7 @@ export const MarketingCampaignsPage: React.FC = () => {
       {campaignModalMode ? (
         <ModalShell
           title={
-            campaignModalMode === "create"
-              ? "Criar campanha"
-              : "Editar campanha"
+            campaignModalMode === "create" ? "Criar campanha" : "Editar campanha"
           }
           subtitle="Monte uma campanha em etapas simples usando apenas modelos aprovados pela Meta."
           onClose={resetCampaignForm}
@@ -1691,11 +1702,11 @@ export const MarketingCampaignsPage: React.FC = () => {
           <div className="border-b border-slate-200 px-6 py-4">
             <div className="flex flex-wrap gap-2">
               {[
-                { step: 1 as CampaignWizardStep, label: "Informações" },
+                { step: 1 as CampaignWizardStep, label: "Informacoes" },
                 { step: 2 as CampaignWizardStep, label: "Template" },
-                { step: 3 as CampaignWizardStep, label: "Público" },
+                { step: 3 as CampaignWizardStep, label: "Publico" },
                 { step: 4 as CampaignWizardStep, label: "Agendamento" },
-                { step: 5 as CampaignWizardStep, label: "Revisão" },
+                { step: 5 as CampaignWizardStep, label: "Revisao" },
               ].map((item) => (
                 <div
                   key={item.step}
@@ -1715,6 +1726,10 @@ export const MarketingCampaignsPage: React.FC = () => {
 
           <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-5">
+              {selectedCampaignId && selectedCampaignLoading ? (
+                <TableSkeleton rows={3} />
+              ) : null}
+
               {campaignStep === 1 ? (
                 <>
                   <Field label="Nome da campanha">
@@ -1727,7 +1742,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                       placeholder="Ex: Reengajamento carteira ativa"
                     />
                   </Field>
-                  <Field label="Descrição interna opcional">
+                  <Field label="Descricao interna opcional">
                     <textarea
                       value={campaignForm.description}
                       onChange={(event) =>
@@ -1741,7 +1756,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                       placeholder="Contexto interno para a equipe acompanhar o objetivo da campanha."
                     />
                   </Field>
-                  <Field label="Número/canal de envio">
+                  <Field label="Numero/canal de envio">
                     <input
                       value={campaignForm.channelLabel}
                       onChange={(event) =>
@@ -1760,7 +1775,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                 <>
                   {approvedTemplates.length === 0 ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                      Nenhum template aprovado está disponível para seleção.
+                      Nenhum template aprovado esta disponivel para selecao.
                     </div>
                   ) : (
                     <div className="grid gap-3">
@@ -1812,19 +1827,19 @@ export const MarketingCampaignsPage: React.FC = () => {
                       value: "all" as AudienceType,
                       title: "Todos os contatos",
                       description:
-                        "Use a base elegível da operação para ampliar o alcance.",
+                        "Use a base elegivel da operacao para ampliar o alcance.",
                     },
                     {
                       value: "tag" as AudienceType,
                       title: "Contatos com tag",
                       description:
-                        "Envie mensagens para segmentos já organizados pela equipe.",
+                        "Envie mensagens para segmentos ja organizados pela equipe.",
                     },
                     {
                       value: "manual" as AudienceType,
-                      title: "Seleção manual",
+                      title: "Selecao manual",
                       description:
-                        "Defina manualmente um lote específico para a campanha.",
+                        "Informe contatos por telefone, nome ou id separados por virgula ou quebra de linha.",
                     },
                   ].map((option) => (
                     <button
@@ -1863,10 +1878,10 @@ export const MarketingCampaignsPage: React.FC = () => {
 
                   {campaignForm.audienceType === "manual" ? (
                     <Field
-                      label="Seleção manual"
-                      hint="Informe o lote ou uma descrição simples da audiência."
+                      label="Selecao manual"
+                      hint="Use telefones, nomes ou ids separados por virgula, ponto e virgula ou quebra de linha."
                     >
-                      <input
+                      <textarea
                         value={campaignForm.manualSelection}
                         onChange={(event) =>
                           handleCampaignFieldChange(
@@ -1874,8 +1889,9 @@ export const MarketingCampaignsPage: React.FC = () => {
                             event.target.value,
                           )
                         }
+                        rows={4}
                         className={inputClassName}
-                        placeholder="Ex: 45 contatos prioritários"
+                        placeholder="Ex: +5511999990001, Maria Silva"
                       />
                     </Field>
                   ) : null}
@@ -1893,9 +1909,10 @@ export const MarketingCampaignsPage: React.FC = () => {
                         : "border-slate-200 bg-white hover:border-slate-300"
                     }`}
                   >
-                    <p className="font-semibold text-slate-900">Enviar agora</p>
+                    <p className="font-semibold text-slate-900">Criar agora</p>
                     <p className="mt-1 text-sm text-slate-500">
-                      A campanha será criada já como execução simulada.
+                      A campanha sera persistida agora, com destinatarios em
+                      status pendente e sem envio real.
                     </p>
                   </button>
 
@@ -1910,11 +1927,9 @@ export const MarketingCampaignsPage: React.FC = () => {
                         : "border-slate-200 bg-white hover:border-slate-300"
                     }`}
                   >
-                    <p className="font-semibold text-slate-900">
-                      Agendar envio
-                    </p>
+                    <p className="font-semibold text-slate-900">Agendar</p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Programe a data e hora para a próxima janela de envio.
+                      Programe a data e hora para a proxima janela interna de envio.
                     </p>
                   </button>
 
@@ -1956,9 +1971,9 @@ export const MarketingCampaignsPage: React.FC = () => {
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-500">Público</p>
+                    <p className="text-sm font-medium text-slate-500">Publico</p>
                     <p className="mt-1 font-semibold text-slate-900">
-                      {buildAudienceLabel()}
+                      {buildAudienceLabel(campaignForm)}
                     </p>
                   </div>
                   <div>
@@ -1968,7 +1983,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                         ? `Agendado para ${formatDateTime(
                             new Date(campaignForm.scheduledAt).toISOString(),
                           )}`
-                        : "Envio imediato simulado"}
+                        : "Criacao imediata sem envio real"}
                     </p>
                   </div>
                   <div>
@@ -1976,17 +1991,22 @@ export const MarketingCampaignsPage: React.FC = () => {
                       Estimativa inicial
                     </p>
                     <p className="mt-1 font-semibold text-slate-900">
-                      {estimateAudienceSize()} contatos
+                      {audiencePreview.loading
+                        ? "Calculando..."
+                        : `${audiencePreview.count} contatos`}
                     </p>
+                    {audiencePreview.error ? (
+                      <p className="mt-2 text-xs text-rose-600">
+                        {audiencePreview.error}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
             </div>
 
             <Card className="h-fit rounded-3xl p-5">
-              <h3 className="font-semibold text-slate-900">
-                Resumo da campanha
-              </h3>
+              <h3 className="font-semibold text-slate-900">Resumo da campanha</h3>
               <div className="mt-4 space-y-4 text-sm text-slate-600">
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="font-medium text-slate-900">Template</p>
@@ -2001,7 +2021,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <PlayCircleIcon className="h-4 w-4 text-emerald-600" />
-                  {buildAudienceLabel()}
+                  {buildAudienceLabel(campaignForm)}
                 </div>
                 <div className="flex items-center gap-2">
                   {campaignForm.sendMode === "scheduled" ? (
@@ -2013,7 +2033,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                     ? `Agendamento em ${formatDateTime(
                         new Date(campaignForm.scheduledAt).toISOString(),
                       )}`
-                    : "Campanha criada para envio imediato simulado"}
+                    : "Campanha criada para persistencia imediata"}
                 </div>
               </div>
             </Card>
@@ -2047,13 +2067,13 @@ export const MarketingCampaignsPage: React.FC = () => {
                   disabled={!canAdvanceCampaignStep()}
                   className="rounded-full"
                 >
-                  Próxima etapa
+                  Proxima etapa
                 </Button>
               ) : (
                 <Button
                   type="button"
                   onClick={handleSaveCampaign}
-                  disabled={!selectedCampaignTemplate}
+                  disabled={!selectedCampaignTemplate || campaignsSaving}
                   className="rounded-full"
                 >
                   {campaignModalMode === "edit"
@@ -2066,201 +2086,231 @@ export const MarketingCampaignsPage: React.FC = () => {
         </ModalShell>
       ) : null}
 
-      {metricsCampaign ? (
+      {metricsCampaignId ? (
         <ModalShell
-          title="Métricas da campanha"
-          subtitle="Acompanhe indicadores simulados de entrega, leitura e respostas."
+          title="Metricas da campanha"
+          subtitle="Acompanhe indicadores reais de entrega, leitura e respostas armazenados no banco."
           onClose={() => setMetricsCampaignId(null)}
           widthClassName="max-w-6xl"
         >
-          <div className="space-y-6 px-6 py-6">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard
-                label="Taxa de entrega"
-                value={formatPercent(
-                  makeRate(metricsCampaign.delivered, metricsCampaign.totalContacts),
-                )}
-                hint={`${metricsCampaign.delivered} entregues de ${metricsCampaign.totalContacts}.`}
-              />
-              <SummaryCard
-                label="Taxa de leitura"
-                value={formatPercent(
-                  makeRate(metricsCampaign.read, metricsCampaign.totalContacts),
-                )}
-                hint={`${metricsCampaign.read} mensagens lidas.`}
-              />
-              <SummaryCard
-                label="Taxa de resposta"
-                value={formatPercent(
-                  makeRate(metricsCampaign.replied, metricsCampaign.totalContacts),
-                )}
-                hint={`${metricsCampaign.replied} respostas registradas.`}
-              />
-              <SummaryCard
-                label="Erros"
-                value={String(metricsCampaign.failed)}
-                hint="Monitoramento de contatos com falha."
+          {metricsCampaignLoading && !metricsCampaign ? (
+            <div className="px-6 py-6">
+              <TableSkeleton rows={5} />
+            </div>
+          ) : metricsCampaign ? (
+            <>
+              <div className="space-y-6 px-6 py-6">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <SummaryCard
+                    label="Taxa de entrega"
+                    value={formatPercent(
+                      makeRate(metricsCampaign.delivered, metricsCampaign.totalContacts),
+                    )}
+                    hint={`${metricsCampaign.delivered} entregues de ${metricsCampaign.totalContacts}.`}
+                  />
+                  <SummaryCard
+                    label="Taxa de leitura"
+                    value={formatPercent(
+                      makeRate(metricsCampaign.read, metricsCampaign.totalContacts),
+                    )}
+                    hint={`${metricsCampaign.read} mensagens lidas.`}
+                  />
+                  <SummaryCard
+                    label="Taxa de resposta"
+                    value={formatPercent(
+                      makeRate(metricsCampaign.replied, metricsCampaign.totalContacts),
+                    )}
+                    hint={`${metricsCampaign.replied} respostas registradas.`}
+                  />
+                  <SummaryCard
+                    label="Erros"
+                    value={String(metricsCampaign.failed)}
+                    hint="Monitoramento de contatos com falha."
+                  />
+                </div>
+
+                <Card className="rounded-3xl p-6">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">
+                        Nome da campanha
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.name}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Status</p>
+                      <div className="mt-1">
+                        <StatusBadge {...campaignStatusMap[metricsCampaign.status]} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">
+                        Template usado
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.template?.internalName ?? "Template removido"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Publico</p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.audienceLabel}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Criada em</p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {formatDateTime(metricsCampaign.createdAt)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">
+                        Enviada/agendada em
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {formatDateTime(metricsCampaign.sendAt)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">
+                        Total selecionado
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.totalContacts}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">
+                        Total enviado
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.delivered + metricsCampaign.failed}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">
+                        Total entregue
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.delivered}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">Total lido</p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.read}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">
+                        Total respondido
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.replied}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-500">
+                        Total com erro
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {metricsCampaign.failed}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="rounded-3xl p-6">
+                  <div className="mb-4 flex items-center gap-2">
+                    <BarChart3Icon className="h-5 w-5 text-slate-600" />
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Destinatarios da campanha
+                    </h3>
+                  </div>
+
+                  {metricsRecipientsError ? (
+                    <ErrorState
+                      message={metricsRecipientsError}
+                      onRetry={refetchMetricsRecipients}
+                    />
+                  ) : metricsRecipientsLoading ? (
+                    <TableSkeleton />
+                  ) : metricsRecipients.length === 0 ? (
+                    <EmptyState
+                      title="Nenhum destinatario encontrado"
+                      description="Quando a campanha tiver publico resolvido, os destinatarios serao exibidos aqui."
+                    />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[1050px] divide-y divide-slate-200">
+                        <thead>
+                          <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            <th className="pb-3 pr-4">Nome</th>
+                            <th className="pb-3 pr-4">Telefone</th>
+                            <th className="pb-3 pr-4">Status</th>
+                            <th className="pb-3 pr-4">Lida em</th>
+                            <th className="pb-3 pr-4">Respondeu?</th>
+                            <th className="pb-3 pr-4">Conversa</th>
+                            <th className="pb-3">Erro</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {metricsRecipients.map((recipient) => (
+                            <tr key={recipient.id} className="align-top">
+                              <td className="py-4 pr-4 font-medium text-slate-900">
+                                {recipient.name}
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {recipient.phone}
+                              </td>
+                              <td className="py-4 pr-4">
+                                <StatusBadge
+                                  {...recipientStatusMap[recipient.status]}
+                                />
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {recipient.readAt
+                                  ? formatDateTime(recipient.readAt)
+                                  : "—"}
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {recipient.replied ? "Sim" : "Nao"}
+                              </td>
+                              <td className="py-4 pr-4 text-sm text-slate-600">
+                                {recipient.conversation}
+                              </td>
+                              <td className="py-4 text-sm text-slate-600">
+                                {recipient.error ?? "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              </div>
+
+              <div className="flex justify-end border-t border-slate-200 px-6 py-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setMetricsCampaignId(null)}
+                >
+                  Fechar
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="px-6 py-6">
+              <EmptyState
+                title="Campanha nao encontrada"
+                description="Nao foi possivel carregar os detalhes desta campanha."
               />
             </div>
-
-            <Card className="rounded-3xl p-6">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Nome da campanha
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {metricsCampaign.name}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">Status</p>
-                  <div className="mt-1">
-                    <StatusBadge {...campaignStatusMap[metricsCampaign.status]} />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Template usado
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {templates.find((item) => item.id === metricsCampaign.templateId)
-                      ?.internalName ?? "Template removido"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">Público</p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {metricsCampaign.audienceLabel}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">Criada em</p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {formatDateTime(metricsCampaign.createdAt)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Enviada/agendada em
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {formatDateTime(metricsCampaign.sendAt)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Total selecionado
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {metricsCampaign.totalContacts}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Total enviado
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {metricsCampaign.delivered + metricsCampaign.failed}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Total entregue
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {metricsCampaign.delivered}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">Total lido</p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {metricsCampaign.read}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Total respondido
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {metricsCampaign.replied}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    Total com erro
-                  </p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {metricsCampaign.failed}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="rounded-3xl p-6">
-              <div className="mb-4 flex items-center gap-2">
-                <BarChart3Icon className="h-5 w-5 text-slate-600" />
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Destinatários simulados
-                </h3>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-[1050px] divide-y divide-slate-200">
-                  <thead>
-                    <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <th className="pb-3 pr-4">Nome</th>
-                      <th className="pb-3 pr-4">Telefone</th>
-                      <th className="pb-3 pr-4">Status</th>
-                      <th className="pb-3 pr-4">Lida em</th>
-                      <th className="pb-3 pr-4">Respondeu?</th>
-                      <th className="pb-3 pr-4">Conversa</th>
-                      <th className="pb-3">Erro</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {metricsRecipients.map((recipient) => (
-                      <tr key={recipient.id} className="align-top">
-                        <td className="py-4 pr-4 font-medium text-slate-900">
-                          {recipient.name}
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-600">
-                          {recipient.phone}
-                        </td>
-                        <td className="py-4 pr-4">
-                          <StatusBadge
-                            {...recipientStatusMap[recipient.status]}
-                          />
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-600">
-                          {recipient.readAt ? formatDateTime(recipient.readAt) : "—"}
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-600">
-                          {recipient.replied ? "Sim" : "Não"}
-                        </td>
-                        <td className="py-4 pr-4 text-sm text-slate-600">
-                          {recipient.conversation}
-                        </td>
-                        <td className="py-4 text-sm text-slate-600">
-                          {recipient.error ?? "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </div>
-
-          <div className="flex justify-end border-t border-slate-200 px-6 py-4">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setMetricsCampaignId(null)}
-            >
-              Fechar
-            </Button>
-          </div>
+          )}
         </ModalShell>
       ) : null}
     </div>
