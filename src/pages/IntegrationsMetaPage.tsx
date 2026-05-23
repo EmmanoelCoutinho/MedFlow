@@ -25,15 +25,28 @@ const META_WA_CONFIG_ID = import.meta.env.VITE_META_WA_CONFIG_ID as
 const META_REDIRECT_URI = import.meta.env.VITE_META_REDIRECT_URI as
   | string
   | undefined;
+const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL as
+  | string
+  | undefined;
+const EVOLUTION_API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY as
+  | string
+  | undefined;
 
 type Connection = {
   id: string;
+  provider: "meta" | "evolution";
   channel: "messenger" | "instagram" | "whatsapp";
   meta_waba_id: string | null;
   meta_phone_number_id: string | null;
   meta_page_id: string | null;
   meta_ig_user_id: string | null;
-  status: "connected" | "disconnected" | "needs_reauth";
+  qr_code?: string | null;
+  connected_phone?: string | null;
+  connected_name?: string | null;
+  session_name?: string | null;
+  last_connection_at?: string | null;
+  last_disconnection_at?: string | null;
+  status: "connecting" | "connected" | "disconnected" | "needs_reauth";
   updated_at: string | null;
 };
 
@@ -51,6 +64,8 @@ type PlatformCardProps = {
   actionLabel?: string;
   onAction?: () => void;
   actionDisabled?: boolean;
+  actionClassName?: string;
+  children?: React.ReactNode;
 };
 
 export const MetaIntegrationsPage: React.FC = () => {
@@ -60,6 +75,7 @@ export const MetaIntegrationsPage: React.FC = () => {
   const [clinicName, setClinicName] = useState<string>("");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   const clinicLabel = useMemo(() => {
     if (!clinicId) return "Empresa atual (indefinida)";
@@ -77,9 +93,69 @@ export const MetaIntegrationsPage: React.FC = () => {
     [connections],
   );
 
-  const whatsapp = useMemo(
-    () => connections.find((c) => c.channel === "whatsapp") ?? null,
+  const whatsappMeta = useMemo(
+    () =>
+      connections.find(
+        (c) => c.channel === "whatsapp" && c.provider === "meta",
+      ) ?? null,
     [connections],
+  );
+
+  const whatsappEvolution = useMemo(
+    () =>
+      connections.find(
+        (c) => c.channel === "whatsapp" && c.provider === "evolution",
+      ) ?? null,
+    [connections],
+  );
+
+  const formatDateTime = useCallback((value?: string | null) => {
+    if (!value) return null;
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(parsed);
+  }, []);
+
+  const whatsappEvolutionConnectedLabel = useMemo(() => {
+    if (!whatsappEvolution) return null;
+
+    const name = whatsappEvolution.connected_name?.trim();
+    const phone = whatsappEvolution.connected_phone?.trim();
+
+    if (name && phone) return `${name} - ${phone}`;
+    if (phone) return phone;
+    if (name) return name;
+    return null;
+  }, [whatsappEvolution]);
+
+  const whatsappEvolutionActionLabel = useMemo(() => {
+    if (qrLoading) return "Gerando QR Code...";
+    if (!whatsappEvolution) return "Conectar via QR Code";
+    if (whatsappEvolution.status === "disconnected") return "Reconectar";
+    return "Conectar via QR Code";
+  }, [qrLoading, whatsappEvolution]);
+
+  const whatsappQrCode = useMemo(
+    () =>
+      whatsappEvolution?.provider === "evolution"
+        ? (whatsappEvolution.qr_code ?? null)
+        : null,
+    [whatsappEvolution],
+  );
+
+  const lastConnectionLabel = useMemo(
+    () => formatDateTime(whatsappEvolution?.last_connection_at),
+    [formatDateTime, whatsappEvolution?.last_connection_at],
+  );
+
+  const lastDisconnectionLabel = useMemo(
+    () => formatDateTime(whatsappEvolution?.last_disconnection_at),
+    [formatDateTime, whatsappEvolution?.last_disconnection_at],
   );
 
   const startMetaOAuth = useCallback(() => {
@@ -122,7 +198,7 @@ export const MetaIntegrationsPage: React.FC = () => {
 
     if (!META_APP_WABA_ID || !META_REDIRECT_URI || !META_WA_CONFIG_ID) {
       setErrorMsg(
-        "Configuração Meta ausente (App ID / Redirect URI / Config ID).",
+        "Configuracao Meta ausente (App ID / Redirect URI / Config ID).",
       );
       return;
     }
@@ -166,9 +242,9 @@ export const MetaIntegrationsPage: React.FC = () => {
     const { data, error } = await supabase
       .from("channel_connections")
       .select(
-        "id,channel,meta_waba_id,meta_phone_number_id,meta_page_id,meta_ig_user_id,status,updated_at",
+        "id,provider,channel,meta_waba_id,meta_phone_number_id,meta_page_id,meta_ig_user_id,qr_code,connected_phone,connected_name,session_name,last_connection_at,last_disconnection_at,status,updated_at",
       )
-      .eq("provider", "meta")
+      .in("provider", ["meta", "evolution"])
       .eq("clinic_id", clinicId)
       .in("channel", ["messenger", "instagram", "whatsapp"])
       .order("updated_at", { ascending: false });
@@ -182,26 +258,153 @@ export const MetaIntegrationsPage: React.FC = () => {
     setConnections((data ?? []) as Connection[]);
   }, [clinicId]);
 
+  const startEvolutionConnection = useCallback(async () => {
+    if (!clinicId) return;
+
+    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+      setErrorMsg(
+        "Configuracao Evolution ausente (VITE_EVOLUTION_API_URL / VITE_EVOLUTION_API_KEY).",
+      );
+      return;
+    }
+
+    setErrorMsg(null);
+    setQrLoading(true);
+
+    try {
+      let evolutionConnection =
+        connections.find(
+          (connection) =>
+            connection.provider === "evolution" &&
+            connection.channel === "whatsapp",
+        ) ?? null;
+
+      if (!evolutionConnection) {
+        const { data, error } = await supabase
+          .from("channel_connections")
+          .insert({
+            clinic_id: clinicId,
+            provider: "evolution",
+            channel: "whatsapp",
+            status: "disconnected",
+            session_name: `clinic_${clinicId}`,
+            evolution_api_url: EVOLUTION_API_URL,
+            evolution_api_key: EVOLUTION_API_KEY,
+          })
+          .select(
+            "id,provider,channel,meta_waba_id,meta_phone_number_id,meta_page_id,meta_ig_user_id,qr_code,connected_phone,connected_name,session_name,last_connection_at,last_disconnection_at,status,updated_at",
+          )
+          .single();
+
+        if (error) throw error;
+
+        evolutionConnection = data as Connection;
+      }
+
+      const { error } = await supabase.functions.invoke(
+        "create-evolution-connection",
+        {
+          body: {
+            connectionId: evolutionConnection.id,
+          },
+        },
+      );
+
+      if (error) throw error;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel iniciar a Conexão via QR Code.";
+      setErrorMsg(message);
+      setQrLoading(false);
+      return;
+    }
+
+    await fetchConnections();
+  }, [clinicId, connections, fetchConnections]);
+
   useEffect(() => {
     fetchClinic();
     fetchConnections();
   }, [fetchClinic, fetchConnections]);
+
+  useEffect(() => {
+    if (!clinicId) return;
+
+    const channel = supabase
+      .channel(`meta-integrations:${clinicId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "channel_connections",
+          filter: `clinic_id=eq.${clinicId}`,
+        },
+        (payload) => {
+          const nextRow = payload.new as Partial<Connection> | null;
+          const prevRow = payload.old as Partial<Connection> | null;
+          const targetId = nextRow?.id ?? prevRow?.id;
+
+          if (!targetId) {
+            fetchConnections();
+            return;
+          }
+
+          setConnections((current) => {
+            if (payload.eventType === "DELETE") {
+              return current.filter((connection) => connection.id !== targetId);
+            }
+
+            const incoming = nextRow as Connection;
+            const index = current.findIndex(
+              (connection) => connection.id === incoming.id,
+            );
+
+            if (index === -1) {
+              return [incoming, ...current];
+            }
+
+            const updated = [...current];
+            updated[index] = { ...updated[index], ...incoming };
+            return updated;
+          });
+
+          if (
+            nextRow?.provider === "evolution" &&
+            nextRow?.channel === "whatsapp"
+          ) {
+            setQrLoading(false);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clinicId, fetchConnections]);
 
   const renderStatus = (status?: Connection["status"] | null) => {
     const s = status ?? "disconnected";
     const cls =
       s === "connected"
         ? "border-green-200 bg-green-50 text-green-700"
-        : s === "needs_reauth"
-          ? "border-yellow-200 bg-yellow-50 text-yellow-800"
-          : "border-gray-200 bg-gray-50 text-gray-700";
+        : s === "connecting"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
+          : s === "needs_reauth"
+            ? "border-yellow-200 bg-yellow-50 text-yellow-800"
+            : "border-gray-200 bg-gray-50 text-gray-700";
 
     const label =
       s === "connected"
         ? "Conectado"
-        : s === "needs_reauth"
-          ? "Reconectar"
-          : "Desconectado";
+        : s === "connecting"
+          ? "Conectando"
+          : s === "needs_reauth"
+            ? "Reconectar"
+            : "Desconectado";
 
     return (
       <span className={`rounded-full border px-2 py-1 text-xs ${cls}`}>
@@ -219,6 +422,8 @@ export const MetaIntegrationsPage: React.FC = () => {
     actionLabel,
     onAction,
     actionDisabled,
+    actionClassName,
+    children,
   }) => (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
@@ -252,7 +457,7 @@ export const MetaIntegrationsPage: React.FC = () => {
         <div className="mt-4">
           <Button
             variant="primary"
-            className="bg-blue-600"
+            className={actionClassName ?? "bg-blue-600"}
             size="sm"
             onClick={onAction}
             disabled={actionDisabled}
@@ -264,6 +469,8 @@ export const MetaIntegrationsPage: React.FC = () => {
           </Button>
         </div>
       ) : null}
+
+      {children ? <div className="mt-4">{children}</div> : null}
     </div>
   );
 
@@ -287,7 +494,7 @@ export const MetaIntegrationsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="space-y-6 px-6 py-6 flex flex-col pb-20">
+      <div className="flex min-h-0 flex-col space-y-6 px-6 py-6 pb-20">
         {errorMsg ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMsg}
@@ -300,7 +507,7 @@ export const MetaIntegrationsPage: React.FC = () => {
               Empresa nao identificada
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              Aguarde o perfil carregar para configurar integracoes.
+              Aguarde o perfil carregar para configurar integrações.
             </p>
           </Card>
         ) : (
@@ -309,7 +516,7 @@ export const MetaIntegrationsPage: React.FC = () => {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">
-                    Meta WhatsApp
+                    WhatsApp
                   </h2>
                   <p className="text-sm text-gray-500">
                     Empresa vinculada: {clinicLabel}
@@ -317,23 +524,99 @@ export const MetaIntegrationsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-3">
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
                 <PlatformCard
-                  title="WhatsApp"
-                  description="Mensagens do número conectado via Meta"
-                  status={whatsapp?.status}
+                  title="WhatsApp via Meta"
+                  description="Integracao oficial da Meta Cloud API."
+                  status={whatsappMeta?.status}
                   icon={
                     <MessageCircleIcon className="h-5 w-5 text-green-600" />
                   }
                   accessItems={[
-                    "Receber e responder mensagens do WhatsApp conectado.",
-                    "Centralizar o atendimento do WhatsApp na inbox.",
-                    "Disponibilizar o canal para operação e automações.",
+                    "API oficial.",
+                    "Templates oficiais.",
+                    "Campanhas.",
+                    "Melhor estabilidade.",
                   ]}
-                  actionLabel="Conectar WhatsApp"
+                  actionLabel="Conectar via Meta"
                   onAction={startWhatsAppOAuth}
                   actionDisabled={!clinicId}
                 />
+
+                <PlatformCard
+                  title="WhatsApp via QR Code"
+                  description="Conecte um WhatsApp existente escaneando um QR Code."
+                  status={whatsappEvolution?.status}
+                  icon={
+                    <MessageCircleIcon className="h-5 w-5 text-green-600" />
+                  }
+                  accessItems={[
+                    "Conexão rápida e simples.",
+                    "Ativação em poucos segundos.",
+                    "Integração instantânea com a inbox.",
+                    "Ideal para operação imediata.",
+                  ]}
+                  actionLabel={whatsappEvolutionActionLabel}
+                  onAction={startEvolutionConnection}
+                  actionDisabled={!clinicId || qrLoading}
+                  actionClassName="bg-green-600"
+                >
+                  {whatsappEvolution?.status === "connected" ? (
+                    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                      <p className="font-medium">WhatsApp conectado</p>
+                      {whatsappEvolution.connected_phone ? (
+                        <p className="mt-1">
+                          {whatsappEvolution.connected_phone}
+                        </p>
+                      ) : null}
+                      {whatsappEvolution.connected_name ? (
+                        <p className="mt-1">
+                          {whatsappEvolution.connected_name}
+                        </p>
+                      ) : null}
+                      {!whatsappEvolution.connected_phone &&
+                      !whatsappEvolution.connected_name &&
+                      whatsappEvolutionConnectedLabel ? (
+                        <p className="mt-1">
+                          {whatsappEvolutionConnectedLabel}
+                        </p>
+                      ) : null}
+                      {lastConnectionLabel ? (
+                        <p className="mt-2 text-xs text-green-700">
+                          Conectado em {lastConnectionLabel}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : whatsappEvolution?.provider === "evolution" &&
+                    whatsappQrCode ? (
+                    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-5 text-center">
+                      <p className="text-sm font-semibold text-gray-900">
+                        Escaneie o QR Code
+                      </p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Abra o WhatsApp no celular e conecte o dispositivo.
+                      </p>
+                      <div className="mt-4 flex justify-center">
+                        <img
+                          src={whatsappQrCode}
+                          alt="QR Code WhatsApp"
+                          className="h-72 w-72"
+                        />
+                      </div>
+                      {lastDisconnectionLabel ? (
+                        <p className="mt-4 text-xs text-gray-500">
+                          Ultima desConexão em {lastDisconnectionLabel}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                      <p className="mt-2 text-xs text-gray-500">
+                        Última desconexão em {lastDisconnectionLabel}
+                      </p>
+                    </div>
+                  )}
+                </PlatformCard>
               </div>
             </Card>
 
@@ -352,11 +635,11 @@ export const MetaIntegrationsPage: React.FC = () => {
               <div className="mt-6 grid gap-3 md:grid-cols-2">
                 <PlatformCard
                   title="Messenger"
-                  description="Mensagens da Página do Facebook"
+                  description="Mensagens da Pagina do Facebook"
                   status={messenger?.status}
                   icon={<FacebookIcon className="h-5 w-5 text-blue-600" />}
                   accessItems={[
-                    "Receber e responder mensagens da Página conectada.",
+                    "Receber e responder mensagens da Pagina conectada.",
                     "Centralizar o atendimento do Facebook na inbox.",
                     "Sincronizar conversas recebidas pelo Facebook.",
                   ]}
@@ -364,18 +647,18 @@ export const MetaIntegrationsPage: React.FC = () => {
 
                 <PlatformCard
                   title="Instagram"
-                  description="DMs do Instagram vinculado a Página"
+                  description="DMs do Instagram vinculado a Pagina"
                   status={instagram?.status}
                   icon={<InstagramIcon className="h-5 w-5 text-pink-600" />}
                   accessItems={[
                     "Receber e responder mensagens diretas do Instagram.",
                     "Centralizar o atendimento do Instagram na inbox.",
-                    "Manter o canal disponivel para operação e automações.",
+                    "Manter o canal disponivel para operacao e automacoes.",
                   ]}
                 />
               </div>
 
-              <div className="flex items-center gap-2 mt-6">
+              <div className="mt-6 flex items-center gap-2">
                 <Button
                   variant="primary"
                   size="sm"
@@ -392,8 +675,8 @@ export const MetaIntegrationsPage: React.FC = () => {
 
               <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
                 <span className="font-medium">Importante:</span> Para realizar a
-                conexão com o Instagram, é necessário que a conta esteja
-                configurada como conta profissional e vinculada a uma página do
+                Conexão com o Instagram, e necessario que a conta esteja
+                configurada como conta profissional e vinculada a uma pagina do
                 Facebook.
               </div>
             </Card>

@@ -79,12 +79,28 @@ function get24hBlockMessage(channel: Channel) {
   return "Não foi possível enviar: essa conversa está fora da janela de atendimento. Envie um template (quando aplicável) ou aguarde o cliente responder.";
 }
 
-function getSendFunctionName(channel: Channel) {
-  return channel === "whatsapp"
-    ? "send-whatsapp-message"
-    : channel === "messenger" || channel === "instagram"
-      ? "send-meta-message"
-      : null;
+function getSendFunctionName(channel: string, provider?: string) {
+  switch (channel) {
+    case "whatsapp": {
+      switch (provider) {
+        case "meta":
+          return "send-whatsapp-message";
+
+        case "evolution":
+          return "send-evoluation-message";
+
+        default:
+          throw new Error(`Unsupported WhatsApp provider: ${provider}`);
+      }
+    }
+
+    case "instagram":
+    case "messenger":
+      return "send-meta-message";
+
+    default:
+      throw new Error(`Unsupported channel: ${channel}`);
+  }
 }
 
 function normalizeInput(input: SendableInput) {
@@ -166,6 +182,26 @@ export const Chat: React.FC = () => {
     loading: loadingEvents,
     error: eventsError,
   } = useConversationEvents(id ?? null);
+
+  const getAccessibleDepartmentIds = useCallback(async (): Promise<
+    string[]
+  > => {
+    if (!clinicId || !authUser) return [];
+
+    const { data, error } = await supabase
+      .from("department_members")
+      .select("department_id")
+      .eq("clinic_user_id", authUser.id);
+
+    if (!error) {
+      const ids = (data ?? [])
+        .map((row: any) => row.department_id)
+        .filter(Boolean);
+      if (ids.length > 0) return ids;
+    }
+
+    return membership?.department_id ? [membership.department_id] : [];
+  }, [authUser, clinicId, membership?.department_id]);
 
   const timelineItems = useMemo(() => {
     const messageItems = messages.map((message) => ({
@@ -337,7 +373,7 @@ export const Chat: React.FC = () => {
       const requestId = ++conversationLoadRequestRef.current;
 
       if (!requestedId) return;
-      if (!clinicId || !departmentId) {
+      if (!clinicId) {
         if (
           requestId !== conversationLoadRequestRef.current ||
           activeRouteConversationIdRef.current !== requestedId
@@ -355,6 +391,21 @@ export const Chat: React.FC = () => {
       if (shouldHardLoad) setLoadingConversation(true);
       else if (!silent) setRefreshingConversation(true);
 
+      const accessibleDepartmentIds = await getAccessibleDepartmentIds();
+      if (accessibleDepartmentIds.length === 0) {
+        if (
+          requestId !== conversationLoadRequestRef.current ||
+          activeRouteConversationIdRef.current !== requestedId
+        ) {
+          return;
+        }
+        setConversation(null);
+        setLoadingConversation(false);
+        setRefreshingConversation(false);
+        didInitialConversationLoadRef.current = true;
+        return;
+      }
+
       const { data, error } = await supabase
         .from("conversations")
         .select(
@@ -362,6 +413,9 @@ export const Chat: React.FC = () => {
         id,
         status,
         channel,
+        channel_connections (
+          provider
+        ),
         last_message_at,
         created_at,
         assigned_user_id,
@@ -391,7 +445,7 @@ export const Chat: React.FC = () => {
         )
         .eq("id", requestedId)
         .eq("clinic_id", clinicId)
-        .eq("department_id", departmentId)
+        .in("department_id", accessibleDepartmentIds)
         .maybeSingle();
 
       if (
@@ -449,6 +503,7 @@ export const Chat: React.FC = () => {
         clinicId: (data as any).clinic_id ?? undefined,
         channel: (data as any).channel as Channel,
         status: ((data as any).status as Conversation["status"]) ?? "pending",
+        provider: (data as any).channel_connections?.provider ?? undefined,
         contactName:
           contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
         contactNumber: contactRow?.phone ?? "",
@@ -470,7 +525,7 @@ export const Chat: React.FC = () => {
       setRefreshingConversation(false);
       didInitialConversationLoadRef.current = true;
     },
-    [id, clinicId, departmentId],
+    [id, clinicId, getAccessibleDepartmentIds],
   );
 
   useEffect(() => {
@@ -602,9 +657,7 @@ export const Chat: React.FC = () => {
     await loadConversation();
 
     if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("inbox:tab", { detail: "open" }),
-      );
+      window.dispatchEvent(new CustomEvent("inbox:tab", { detail: "open" }));
     }
     setAcceptingConversation(false);
   }, [id, loadConversation]);
@@ -736,8 +789,8 @@ export const Chat: React.FC = () => {
       return conversation.assignedTo === authUser.id;
     }
 
-    return !!departmentId;
-  }, [authUser, conversation, departmentId]);
+    return true;
+  }, [authUser, conversation]);
 
   const createSendNonce = useCallback(async (conversationId: string) => {
     const { data, error } = await supabase.functions.invoke(
@@ -816,7 +869,12 @@ export const Chat: React.FC = () => {
         return;
       }
 
-      const functionName = getSendFunctionName(conversation.channel);
+      console.log("props", conversation);
+
+      const functionName = getSendFunctionName(
+        conversation.channel,
+        conversation.provider,
+      );
       if (!functionName) {
         markLocalMessage(tempId, {
           localStatus: "failed",
@@ -865,9 +923,13 @@ export const Chat: React.FC = () => {
 
       const inserted = (data as any)?.message;
       if (!inserted) {
+        console.warn(
+          `Envio concluido sem mensagem persistida imediata (${functionName}). Aguardando sincronizacao pelo realtime.`,
+          data,
+        );
         markLocalMessage(tempId, {
-          localStatus: "failed",
-          localError: "Envio não retornou confirmação. Reenviar.",
+          localStatus: "sent",
+          localError: null,
         });
         return;
       }
@@ -1030,7 +1092,9 @@ export const Chat: React.FC = () => {
   }
 
   const showConversationNotFound =
-    !loadingConversation && !conversation && didInitialConversationLoadRef.current;
+    !loadingConversation &&
+    !conversation &&
+    didInitialConversationLoadRef.current;
 
   if (showConversationNotFound) {
     return (

@@ -42,6 +42,7 @@ export type Conversation = {
   tags?: Tag[];
   assignedTo?: string;
   status: "open" | "pending" | "closed";
+  provider?: "meta" | "evolution";
 };
 export type Message = {
   id: string;

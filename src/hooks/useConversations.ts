@@ -176,6 +176,9 @@ export function useConversations(options: UseConversationsOptions = {}) {
           id,
           status,
           channel,
+          channel_connections!inner (
+            provider
+          ),
           last_message_at,
           created_at,
           assigned_user_id,
@@ -288,7 +291,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
               id: row.id,
               channel: row.channel as Channel,
               status: row.status,
-
+              provider: row.channel_connections?.provider,
               contactName:
                 contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
               contactNumber: contactRow?.phone ?? "",
@@ -631,7 +634,10 @@ export function useConversations(options: UseConversationsOptions = {}) {
   );
 
   const totalUnreadCount = useMemo(() => {
-    return conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+    return conversations.reduce(
+      (sum, conv) => sum + (conv.unreadCount || 0),
+      0,
+    );
   }, [conversations]);
 
   const totalUnreadOpen = useMemo(() => {
@@ -644,6 +650,10 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return conversations
       .filter((conv) => conv.status === "pending")
       .reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+  }, [conversations]);
+
+  useEffect(() => {
+    console.log("[useConversations] conversation items:", conversations);
   }, [conversations]);
 
   return {

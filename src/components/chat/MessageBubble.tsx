@@ -207,6 +207,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const showStatusRow =
     !isClient && (localStatus === "sending" || localStatus === "failed");
+  const canRetryFailedMessage =
+    localStatus === "failed" && typeof onRetry === "function";
 
   const maxPreviewLength = 200;
   const shouldTruncate = displayText.length > maxPreviewLength;
@@ -231,7 +233,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         <div className="flex items-center justify-end gap-2 mt-1">
           <span className="text-xs text-red-600">Nao enviada</span>
 
-          {typeof onRetry === "function" && (
+          {canRetryFailedMessage && (
             <button
               type="button"
               onClick={() => onRetry(message)}
@@ -245,12 +247,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
 
     return null;
-  }, [showStatusRow, localStatus, onRetry, message]);
+  }, [showStatusRow, localStatus, canRetryFailedMessage, onRetry, message]);
 
   const errorHintNode = useMemo(() => {
     if (!showStatusRow) return null;
     if (localStatus !== "failed") return null;
     if (!localError) return null;
+    if (canRetryFailedMessage) return null;
 
     return (
       <div className="flex items-center justify-end mt-1">
@@ -259,7 +262,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </span>
       </div>
     );
-  }, [showStatusRow, localStatus, localError]);
+  }, [showStatusRow, localStatus, localError, canRetryFailedMessage]);
 
   return (
     <div className={`flex ${isClient ? "justify-start" : "justify-end"}`}>
