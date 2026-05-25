@@ -118,11 +118,11 @@ export const Inbox: React.FC = () => {
       icon: MessageSquareTextIcon,
       path: "/inbox/quick-messages",
     },
-    {
-      label: "Marketing / Campanhas",
-      icon: MegaphoneIcon,
-      path: "/inbox/marketing-campaigns",
-    },
+    // {
+    //   label: "Marketing / Campanhas",
+    //   icon: MegaphoneIcon,
+    //   path: "/inbox/marketing-campaigns",
+    // },
   ];
 
   return (
