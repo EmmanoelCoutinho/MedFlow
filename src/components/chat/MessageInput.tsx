@@ -652,6 +652,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       return;
     }
 
+    setShowAttachments(false);
+
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -751,6 +753,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       e.target.value = "";
       return;
     }
+
+    setShowAttachments(false);
 
     const files = e.target.files;
     if (!files || files.length === 0) return;
