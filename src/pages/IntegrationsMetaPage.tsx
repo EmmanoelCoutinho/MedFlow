@@ -740,11 +740,13 @@ export const MetaIntegrationsPage: React.FC = () => {
                       ) : null}
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                      <p className="mt-2 text-xs text-gray-500">
-                        Última desconexão em {lastDisconnectionLabel}
-                      </p>
-                    </div>
+                    lastDisconnectionLabel && (
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                        <p className="mt-2 text-xs text-gray-500">
+                          Última desconexão em {lastDisconnectionLabel}
+                        </p>
+                      </div>
+                    )
                   )}
                 </PlatformCard>
               </div>
