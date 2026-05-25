@@ -116,12 +116,21 @@ export const MetaIntegrationsPage: React.FC = () => {
     [connections],
   );
 
+  const isWhatsAppMetaConnected = useMemo(
+    () =>
+      whatsappMeta?.provider === "meta" && whatsappMeta.status === "connected",
+    [whatsappMeta],
+  );
+
   const isWhatsAppEvolutionConnected = useMemo(
     () =>
       whatsappEvolution?.provider === "evolution" &&
       whatsappEvolution.status === "connected",
     [whatsappEvolution],
   );
+
+  const blockMetaByEvolution = isWhatsAppEvolutionConnected;
+  const blockEvolutionByMeta = isWhatsAppMetaConnected;
 
   const formatDateTime = useCallback((value?: string | null) => {
     if (!value) return null;
@@ -655,8 +664,15 @@ export const MetaIntegrationsPage: React.FC = () => {
                   ]}
                   actionLabel="Conectar via Meta"
                   onAction={startWhatsAppOAuth}
-                  actionDisabled={!clinicId}
-                />
+                  actionDisabled={!clinicId || blockMetaByEvolution}
+                >
+                  {blockMetaByEvolution ? (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                      Esta opção fica indisponível enquanto houver um WhatsApp
+                      conectado via QR Code.
+                    </div>
+                  ) : null}
+                </PlatformCard>
 
                 <PlatformCard
                   title="WhatsApp via QR Code"
@@ -677,7 +693,12 @@ export const MetaIntegrationsPage: React.FC = () => {
                       ? disconnectEvolutionConnection
                       : startEvolutionConnection
                   }
-                  actionDisabled={!clinicId || qrLoading || disconnectLoading}
+                  actionDisabled={
+                    !clinicId ||
+                    qrLoading ||
+                    disconnectLoading ||
+                    (!isWhatsAppEvolutionConnected && blockEvolutionByMeta)
+                  }
                   actionClassName={
                     isWhatsAppEvolutionConnected
                       ? "bg-red-600 hover:bg-red-700"
@@ -716,6 +737,11 @@ export const MetaIntegrationsPage: React.FC = () => {
                           Conectado em {lastConnectionLabel}
                         </p>
                       ) : null}
+                    </div>
+                  ) : blockEvolutionByMeta ? (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                      Esta opção fica indisponível enquanto houver um WhatsApp
+                      conectado via Meta.
                     </div>
                   ) : whatsappEvolution?.provider === "evolution" &&
                     whatsappQrCode ? (
