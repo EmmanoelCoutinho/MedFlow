@@ -231,7 +231,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (localStatus === "failed") {
       return (
         <div className="flex items-center justify-end gap-2 mt-1">
-          <span className="text-xs text-red-600">Nao enviada</span>
+          <span className="text-xs text-red-600">Não enviada</span>
 
           {canRetryFailedMessage && (
             <button
@@ -312,7 +312,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                         className="w-56 h-9 bg-transparent outline-none"
                         src={mediaUrl}
                       >
-                        Seu navegador nao suporta o player de audio.
+                        Seu navegador não suporta o player de audio.
                       </audio>
                     </div>
                     <AudioTranscriptStatus

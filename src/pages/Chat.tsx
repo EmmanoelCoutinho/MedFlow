@@ -79,6 +79,12 @@ function get24hBlockMessage(channel: Channel) {
   return "Não foi possível enviar: essa conversa está fora da janela de atendimento. Envie um template (quando aplicável) ou aguarde o cliente responder.";
 }
 
+function formatRecordTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function getSendFunctionName(channel: string, provider?: string) {
   switch (channel) {
     case "whatsapp": {
@@ -152,6 +158,11 @@ export const Chat: React.FC = () => {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(true);
   const [draftMessage, setDraftMessage] = useState("");
+  const [recordingUiState, setRecordingUiState] = useState({
+    isRecording: false,
+    isSendingAudio: false,
+    recordSeconds: 0,
+  });
 
   const [isManageTagsOpen, setIsManageTagsOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState<UiTag[]>([]);
@@ -231,6 +242,11 @@ export const Chat: React.FC = () => {
     setLoadingConversation(true);
     setRefreshingConversation(false);
     setDraftMessage("");
+    setRecordingUiState({
+      isRecording: false,
+      isSendingAudio: false,
+      recordSeconds: 0,
+    });
   }, [id]);
 
   const getContainerMetrics = () => {
@@ -1070,7 +1086,7 @@ export const Chat: React.FC = () => {
 
       if (error) {
         console.error("Erro ao reprocessar transcricao:", error);
-        toast.error("Nao foi possivel reprocessar a transcricao.");
+        toast.error("Não foi possivel reprocessar a transcricao.");
         return;
       }
 
@@ -1104,7 +1120,7 @@ export const Chat: React.FC = () => {
       <div className="flex items-center justify-center h-full w-full bg-white">
         <div className="text-center">
           <h3 className="text-lg font-medium text-[#1E1E1E] mb-2">
-            Conversa nao encontrada
+            Conversa não encontrada
           </h3>
           <Button variant="primary" onClick={() => navigate("/inbox")}>
             Voltar para Conversas
@@ -1200,6 +1216,31 @@ export const Chat: React.FC = () => {
         </button>
       )}
 
+      {(recordingUiState.isRecording || recordingUiState.isSendingAudio) && (
+        <div className="pointer-events-none absolute bottom-40 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          <div className="rounded-xl border border-red-100 bg-white/95 px-4 py-3 text-sm text-[#1F2937] shadow-lg backdrop-blur">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
+              <span className="font-medium">
+                {recordingUiState.isSendingAudio
+                  ? "Enviando audio..."
+                  : "Gravando..."}
+              </span>
+              {recordingUiState.isRecording && (
+                <span className="text-[#6B7280]">
+                  {formatRecordTime(recordingUiState.recordSeconds)}
+                </span>
+              )}
+            </div>
+            {recordingUiState.isRecording && (
+              <p className="mt-1 text-xs text-[#6B7280]">
+                Toque no botão de envio para concluir e enviar.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {isManageTagsOpen && (
         <div className="fixed inset-0 z-[9999]">
           <div
@@ -1292,6 +1333,7 @@ export const Chat: React.FC = () => {
           onDraftChange={setDraftMessage}
           quickMessages={quickMessages}
           quickMessagesLoading={loadingQuickMessages}
+          onRecordingStateChange={setRecordingUiState}
         />
       )}
     </div>

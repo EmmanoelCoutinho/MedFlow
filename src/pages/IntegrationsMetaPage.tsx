@@ -369,7 +369,7 @@ export const MetaIntegrationsPage: React.FC = () => {
       const message =
         error instanceof Error
           ? error.message
-          : "Nao foi possivel iniciar a Conexão via QR Code.";
+          : "Não foi possivel iniciar a Conexão via QR Code.";
       setErrorMsg(message);
       setQrLoading(false);
       return;
@@ -380,7 +380,7 @@ export const MetaIntegrationsPage: React.FC = () => {
 
   const disconnectEvolutionConnection = useCallback(async () => {
     if (!whatsappEvolution?.id) {
-      setErrorMsg("Conexao Evolution nao encontrada para desconectar.");
+      setErrorMsg("Conexao Evolution não encontrada para desconectar.");
       return;
     }
 
@@ -406,14 +406,15 @@ export const MetaIntegrationsPage: React.FC = () => {
       );
 
       if (!response.ok) {
-        const errorPayload = (await response.json().catch(() => null)) as
-          | { error?: string; message?: string }
-          | null;
+        const errorPayload = (await response.json().catch(() => null)) as {
+          error?: string;
+          message?: string;
+        } | null;
 
         throw new Error(
           errorPayload?.error ??
             errorPayload?.message ??
-            "Nao foi possivel desconectar a instancia Evolution.",
+            "Não foi possivel desconectar a instancia Evolution.",
         );
       }
 
@@ -422,7 +423,7 @@ export const MetaIntegrationsPage: React.FC = () => {
       const message =
         error instanceof Error
           ? error.message
-          : "Nao foi possivel desconectar a instancia Evolution.";
+          : "Não foi possivel desconectar a instancia Evolution.";
       setErrorMsg(message);
     } finally {
       setDisconnectLoading(false);
@@ -618,7 +619,7 @@ export const MetaIntegrationsPage: React.FC = () => {
         {!clinicId ? (
           <Card className="p-6">
             <h2 className="text-lg font-semibold text-gray-900">
-              Empresa nao identificada
+              Empresa não identificada
             </h2>
             <p className="mt-1 text-sm text-gray-500">
               Aguarde o perfil carregar para configurar integrações.
