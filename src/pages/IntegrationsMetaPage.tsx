@@ -5,6 +5,7 @@ import {
   ExternalLinkIcon,
   FacebookIcon,
   InstagramIcon,
+  LogOutIcon,
   MessageCircleIcon,
   Settings2Icon,
 } from "lucide-react";
@@ -29,6 +30,9 @@ const EVOLUTION_API_URL = import.meta.env.VITE_EVOLUTION_API_URL as
   | string
   | undefined;
 const EVOLUTION_API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY as
+  | string
+  | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_CLIENT_KEY as
   | string
   | undefined;
 
@@ -65,6 +69,8 @@ type PlatformCardProps = {
   onAction?: () => void;
   actionDisabled?: boolean;
   actionClassName?: string;
+  actionIcon?: React.ReactNode;
+  actionAfterChildren?: boolean;
   children?: React.ReactNode;
 };
 
@@ -76,6 +82,7 @@ export const MetaIntegrationsPage: React.FC = () => {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+  const [disconnectLoading, setDisconnectLoading] = useState(false);
 
   const clinicLabel = useMemo(() => {
     if (!clinicId) return "Empresa atual (indefinida)";
@@ -109,6 +116,13 @@ export const MetaIntegrationsPage: React.FC = () => {
     [connections],
   );
 
+  const isWhatsAppEvolutionConnected = useMemo(
+    () =>
+      whatsappEvolution?.provider === "evolution" &&
+      whatsappEvolution.status === "connected",
+    [whatsappEvolution],
+  );
+
   const formatDateTime = useCallback((value?: string | null) => {
     if (!value) return null;
 
@@ -119,6 +133,34 @@ export const MetaIntegrationsPage: React.FC = () => {
       dateStyle: "short",
       timeStyle: "short",
     }).format(parsed);
+  }, []);
+
+  const formatPhoneIdentifier = useCallback((value?: string | null) => {
+    const rawValue = value?.trim();
+    if (!rawValue) return null;
+
+    const identifier = rawValue.includes("@")
+      ? rawValue.split("@")[0].trim()
+      : rawValue;
+    const digits = identifier.replace(/\D/g, "");
+
+    if (digits.length === 13 && digits.startsWith("55")) {
+      return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+    }
+
+    if (digits.length === 12 && digits.startsWith("55")) {
+      return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+    }
+
+    if (digits.length === 11) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+    }
+
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+
+    return identifier;
   }, []);
 
   const whatsappEvolutionConnectedLabel = useMemo(() => {
@@ -133,12 +175,24 @@ export const MetaIntegrationsPage: React.FC = () => {
     return null;
   }, [whatsappEvolution]);
 
+  const whatsappEvolutionConnectedPhoneLabel = useMemo(
+    () => formatPhoneIdentifier(whatsappEvolution?.connected_phone),
+    [formatPhoneIdentifier, whatsappEvolution?.connected_phone],
+  );
+
   const whatsappEvolutionActionLabel = useMemo(() => {
+    if (disconnectLoading) return "Desconectando...";
     if (qrLoading) return "Gerando QR Code...";
+    if (isWhatsAppEvolutionConnected) return "Desconectar";
     if (!whatsappEvolution) return "Conectar via QR Code";
     if (whatsappEvolution.status === "disconnected") return "Reconectar";
     return "Conectar via QR Code";
-  }, [qrLoading, whatsappEvolution]);
+  }, [
+    disconnectLoading,
+    isWhatsAppEvolutionConnected,
+    qrLoading,
+    whatsappEvolution,
+  ]);
 
   const whatsappQrCode = useMemo(
     () =>
@@ -324,6 +378,57 @@ export const MetaIntegrationsPage: React.FC = () => {
     await fetchConnections();
   }, [clinicId, connections, fetchConnections]);
 
+  const disconnectEvolutionConnection = useCallback(async () => {
+    if (!whatsappEvolution?.id) {
+      setErrorMsg("Conexao Evolution nao encontrada para desconectar.");
+      return;
+    }
+
+    setErrorMsg(null);
+    setDisconnectLoading(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      const response = await fetch(
+        "https://ketolvqnptmdczkzrqba.supabase.co/functions/v1/disconnect-evolution-connection",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY } : {}),
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            connectionId: whatsappEvolution.id,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorPayload = (await response.json().catch(() => null)) as
+          | { error?: string; message?: string }
+          | null;
+
+        throw new Error(
+          errorPayload?.error ??
+            errorPayload?.message ??
+            "Nao foi possivel desconectar a instancia Evolution.",
+        );
+      }
+
+      await fetchConnections();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel desconectar a instancia Evolution.";
+      setErrorMsg(message);
+    } finally {
+      setDisconnectLoading(false);
+    }
+  }, [fetchConnections, whatsappEvolution?.id]);
+
   useEffect(() => {
     fetchClinic();
     fetchConnections();
@@ -376,6 +481,7 @@ export const MetaIntegrationsPage: React.FC = () => {
             nextRow?.channel === "whatsapp"
           ) {
             setQrLoading(false);
+            setDisconnectLoading(false);
           }
         },
       )
@@ -423,37 +529,12 @@ export const MetaIntegrationsPage: React.FC = () => {
     onAction,
     actionDisabled,
     actionClassName,
+    actionIcon,
+    actionAfterChildren = false,
     children,
-  }) => (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-50 text-gray-700">
-            {icon}
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-900">{title}</p>
-            <p className="text-xs text-gray-500">{description}</p>
-          </div>
-        </div>
-        {renderStatus(status)}
-      </div>
-
-      <div className="mt-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-          Acesso liberado
-        </p>
-        <ul className="mt-2 space-y-2 text-sm text-gray-700">
-          {accessItems.map((item) => (
-            <li key={item} className="flex items-start gap-2">
-              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-gray-300" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {actionLabel && onAction ? (
+  }) => {
+    const actionContent =
+      actionLabel && onAction ? (
         <div className="mt-4">
           <Button
             variant="primary"
@@ -463,16 +544,49 @@ export const MetaIntegrationsPage: React.FC = () => {
             disabled={actionDisabled}
           >
             <span className="flex items-center gap-2">
-              <ExternalLinkIcon className="h-4 w-4" />
+              {actionIcon ?? <ExternalLinkIcon className="h-4 w-4" />}
               {actionLabel}
             </span>
           </Button>
         </div>
-      ) : null}
+      ) : null;
 
-      {children ? <div className="mt-4">{children}</div> : null}
-    </div>
-  );
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gray-50 text-gray-700">
+              {icon}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{title}</p>
+              <p className="text-xs text-gray-500">{description}</p>
+            </div>
+          </div>
+          {renderStatus(status)}
+        </div>
+
+        <div className="mt-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+            Acesso liberado
+          </p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-700">
+            {accessItems.map((item) => (
+              <li key={item} className="flex items-start gap-2">
+                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-gray-300" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {!actionAfterChildren ? actionContent : null}
+
+        {children ? <div className="mt-4">{children}</div> : null}
+        {actionAfterChildren ? actionContent : null}
+      </div>
+    );
+  };
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50">
@@ -557,16 +671,31 @@ export const MetaIntegrationsPage: React.FC = () => {
                     "Ideal para operação imediata.",
                   ]}
                   actionLabel={whatsappEvolutionActionLabel}
-                  onAction={startEvolutionConnection}
-                  actionDisabled={!clinicId || qrLoading}
-                  actionClassName="bg-green-600"
+                  onAction={
+                    isWhatsAppEvolutionConnected
+                      ? disconnectEvolutionConnection
+                      : startEvolutionConnection
+                  }
+                  actionDisabled={!clinicId || qrLoading || disconnectLoading}
+                  actionClassName={
+                    isWhatsAppEvolutionConnected
+                      ? "bg-red-600 hover:bg-red-700"
+                      : "bg-green-600"
+                  }
+                  actionIcon={
+                    isWhatsAppEvolutionConnected ? (
+                      <LogOutIcon className="h-4 w-4" />
+                    ) : undefined
+                  }
+                  actionAfterChildren={isWhatsAppEvolutionConnected}
                 >
-                  {whatsappEvolution?.status === "connected" ? (
+                  {isWhatsAppEvolutionConnected ? (
                     <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
                       <p className="font-medium">WhatsApp conectado</p>
-                      {whatsappEvolution.connected_phone ? (
+                      {whatsappEvolutionConnectedPhoneLabel ? (
                         <p className="mt-1">
-                          {whatsappEvolution.connected_phone}
+                          <span className="font-medium">Numero conectado:</span>{" "}
+                          {whatsappEvolutionConnectedPhoneLabel}
                         </p>
                       ) : null}
                       {whatsappEvolution.connected_name ? (

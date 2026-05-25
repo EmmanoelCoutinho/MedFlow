@@ -51,6 +51,33 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   }, [conversation.contactName]);
 
   const avatar = conversation.contactAvatar;
+  const formattedIdentifier = useMemo(() => {
+    const rawValue = (conversation.contactNumber ?? "").trim();
+    if (!rawValue) return "";
+
+    const identifier = rawValue.includes("@")
+      ? rawValue.split("@")[0].trim()
+      : rawValue;
+    const digits = identifier.replace(/\D/g, "");
+
+    if (digits.length === 13 && digits.startsWith("55")) {
+      return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+    }
+
+    if (digits.length === 12 && digits.startsWith("55")) {
+      return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+    }
+
+    if (digits.length === 11) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+    }
+
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+
+    return identifier;
+  }, [conversation.contactNumber]);
 
   const handleAccept = async () => {
     if (!onAccept || acceptDisabled || isAccepting) return;
@@ -108,9 +135,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             </h2>
 
             <div className="mt-0.5 flex items-center gap-2">
-              {conversation.contactNumber && (
+              {formattedIdentifier && (
                 <span className="text-xs text-gray-500">
-                  {conversation.contactNumber}
+                  {formattedIdentifier}
                 </span>
               )}
 

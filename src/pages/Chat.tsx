@@ -419,11 +419,7 @@ export const Chat: React.FC = () => {
         last_message_at,
         created_at,
         assigned_user_id,
-        contacts:contact_id (
-          id,
-          name,
-          phone
-        ),
+        contacts:contact_id (*),
         messages (
           id,
           text,
@@ -486,6 +482,12 @@ export const Chat: React.FC = () => {
       const contactRow = Array.isArray(rawContacts)
         ? rawContacts[0]
         : rawContacts;
+      const contactAvatar =
+        contactRow?.avatar ??
+        contactRow?.avatar_url ??
+        contactRow?.photo_url ??
+        contactRow?.profile_pic_url ??
+        contactRow?.image_url;
 
       const ct = ((data as any).conversation_tags as any[]) ?? [];
       const tagsFromConv: UiTag[] = ct
@@ -507,6 +509,7 @@ export const Chat: React.FC = () => {
         contactName:
           contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
         contactNumber: contactRow?.phone ?? "",
+        contactAvatar: contactAvatar ?? undefined,
         lastMessage: last?.text ?? "",
         lastMessageType: (last as any)?.type ?? "text",
         lastTimestamp:
