@@ -856,7 +856,11 @@ export const Chat: React.FC = () => {
       const { tempId, input } = opts;
 
       const lastInboundAt = getLastInboundClientAt(messages);
-      const canSend = isInside24hWindow(lastInboundAt);
+
+      const isMetaProvider = conversation.provider === "meta";
+      const canSend = !isMetaProvider || isInside24hWindow(lastInboundAt);
+
+      console.log(canSend);
 
       if (!canSend) {
         // mantém a mensagem e marca como falha (não some)
@@ -868,6 +872,7 @@ export const Chat: React.FC = () => {
         toast.info(get24hBlockMessage(conversation.channel), {
           autoClose: 4500,
         });
+
         return;
       }
 
