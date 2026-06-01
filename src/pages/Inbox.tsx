@@ -10,6 +10,7 @@ import {
   TagIcon,
   UsersIcon,
   Settings2Icon,
+  SendToBack, // ✅ Importado o ícone para Mensagens em Massa
 } from "lucide-react";
 
 import { FiBookOpen } from "react-icons/fi";
@@ -123,6 +124,12 @@ export const Inbox: React.FC = () => {
       icon: MegaphoneIcon,
       path: "/inbox/marketing-campaigns",
     },
+    // ✅ ADICIONADO O ITEM NO MENU LATERAL
+    {
+      label: "Mensagens em massa",
+      icon: SendToBack,
+      path: "/inbox/mass-messages",
+    },
   ];
 
   return (
@@ -153,7 +160,7 @@ export const Inbox: React.FC = () => {
         </div>
 
         {/* (opcional) se o menu crescer, deixa ele rolar */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto pb-16">
           {sidebarItems.map((item, index) => {
             const Icon = item.icon;
             const active = item.path
@@ -185,7 +192,7 @@ export const Inbox: React.FC = () => {
               </button>
             );
           })}
-          <div className="p-2 absolute bottom-0 left-0">
+          <div className="p-2 absolute bottom-0 left-0 bg-gray-50 border-r w-inherit group-hover:w-64 transition-all duration-200">
             <button
               type="button"
               onClick={() => navigate("/inbox/settings")}

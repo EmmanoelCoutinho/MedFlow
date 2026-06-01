@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+// 1. Importamos o Link do react-router-dom
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import type { Location } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
@@ -47,7 +48,7 @@ export const Login: React.FC = () => {
     }
     const from = (location.state as { from?: Location })?.from?.pathname;
     navigate(from || '/inbox', { replace: true });
-  }, [authUser, location.state, navigate]);
+  } , [authUser, location.state, navigate]);
 
   return (
     <div className="min-h-screen w-full bg-white flex items-center justify-center p-4">
@@ -60,7 +61,9 @@ export const Login: React.FC = () => {
           />
           <p className="text-[#1E1E1E] text-lg">Central de Mensagens</p>
         </div>
+        
         <h2 className="text-2xl font-semibold text-[#1E1E1E] mb-6">Entrar</h2>
+        
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="E-mail"
@@ -70,13 +73,27 @@ export const Login: React.FC = () => {
             onChange={(e) => setEmail(e.target.value)}
             error={error}
           />
-          <Input
-            label="Senha"
-            type="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          
+          {/* Container do campo de senha + link de esqueci a senha */}
+          <div className="space-y-1">
+            <Input
+              label="Senha"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {/* 2. Adicionado o link de redefinir senha logo abaixo do input */}
+            <div className="text-right">
+              <Link 
+                to="/forgot-password" 
+                className="text-xs text-[#0A84FF] hover:underline"
+              >
+                Esqueceu sua senha?
+              </Link>
+            </div>
+          </div>
+
           <Button
             type="submit"
             variant="primary"
@@ -86,6 +103,7 @@ export const Login: React.FC = () => {
             Entrar
           </Button>
         </form>
+
         <div className="mt-6 text-center">
           <a href="#" className="text-sm text-[#0A84FF] hover:underline">
             Problemas para entrar?

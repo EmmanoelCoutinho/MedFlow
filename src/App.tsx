@@ -6,6 +6,8 @@ import {
   useLocation,
 } from "react-router-dom";
 import { Login } from "./pages/Login";
+// 1. IMPORTAR A NOVA PÁGINA (Ajuste o caminho se ela estiver em outra pasta)
+import { ForgotPassword } from "./pages/ForgotPassword"; 
 import { Inbox } from "./pages/Inbox";
 import { Chat } from "./pages/Chat";
 import { Header } from "./components/layout/Header";
@@ -58,10 +60,13 @@ const RequireAuth = ({ children }: RequireAuthProps) => {
 
 function RoutedApp() {
   const location = useLocation();
-  const showHeader = location.pathname !== "/login";
+  
+  // 2. ADICIONAR CONDIÇÃO PARA NÃO EXIBIR O HEADER NA TELA DE RECUPERAÇÃO DE SENHA
+  const showHeader = location.pathname !== "/login" && location.pathname !== "/forgot-password";
   const { loading } = useAuth();
 
-  if (loading && location.pathname !== "/login") {
+  // Garante que o loading não trave a tela se o usuário estiver na tela de login ou esqueci a senha
+  if (loading && location.pathname !== "/login" && location.pathname !== "/forgot-password") {
     return <AuthLoadingScreen />;
   }
 
@@ -77,6 +82,9 @@ function RoutedApp() {
       >
         <Routes>
           <Route path="/login" element={<Login />} />
+          
+          {/* 3. ADICIONAR A ROTA DO FORGOT PASSWORD */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/auth/set-password" element={<SetPassword />} />
@@ -132,7 +140,8 @@ function RoutedApp() {
 
 export function App() {
   return (
-    <BrowserRouter future={{ v7_relativeSplatPath: true }}>
+    // ✅ ADICIONADO: v7_startTransition: true para eliminar o warning do React Router v7
+    <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <AuthProvider>
         <ClinicProvider>
           <ToastContainer position="top-right" autoClose={3000} />
