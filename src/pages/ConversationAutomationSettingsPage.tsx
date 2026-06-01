@@ -221,7 +221,7 @@ export const ConversationAutomationSettingsPage: React.FC = () => {
   const fetchSettings = useCallback(async () => {
     if (!clinicId) {
       setLoading(false);
-      setLoadError("Clinica nao identificada.");
+      setLoadError("Clinica não identificada.");
       return;
     }
 
@@ -260,7 +260,7 @@ export const ConversationAutomationSettingsPage: React.FC = () => {
   const persistSettings = useCallback(
     async (values: AutomationFormValues, showSuccessToast: boolean) => {
       if (!clinicId) {
-        toast.error("Nao foi possivel identificar a clinica atual.");
+        toast.error("Não foi possivel identificar a clinica atual.");
         return;
       }
 
@@ -381,7 +381,7 @@ export const ConversationAutomationSettingsPage: React.FC = () => {
         <div className="mx-auto max-w-4xl space-y-5">
           {loadError ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              <p>Nao foi possivel carregar as configuracoes.</p>
+              <p>Não foi possivel carregar as configuracoes.</p>
               <p className="mt-1">{loadError}</p>
               <button
                 type="button"

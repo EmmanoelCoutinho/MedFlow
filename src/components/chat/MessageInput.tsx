@@ -35,6 +35,11 @@ interface MessageInputProps {
   onDraftChange?: (value: string) => void;
   quickMessages?: QuickMessage[];
   quickMessagesLoading?: boolean;
+  onRecordingStateChange?: (state: {
+    isRecording: boolean;
+    isSendingAudio: boolean;
+    recordSeconds: number;
+  }) => void;
 }
 
 type AllowedImageMime = "image/jpeg" | "image/png";
@@ -62,6 +67,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onDraftChange,
   quickMessages = [],
   quickMessagesLoading = false,
+  onRecordingStateChange,
 }) => {
   const [internalMessage, setInternalMessage] = useState("");
   const [showEmojis, setShowEmojis] = useState(false);
@@ -150,6 +156,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     );
     return () => window.clearInterval(id);
   }, [isRecording]);
+
+  useEffect(() => {
+    onRecordingStateChange?.({
+      isRecording,
+      isSendingAudio,
+      recordSeconds,
+    });
+  }, [isRecording, isSendingAudio, onRecordingStateChange, recordSeconds]);
 
   const stopStreamTracks = () => {
     recordStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -512,7 +526,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (disabled) return;
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      toast.error("Seu navegador nao permite gravacao de audio.");
+      toast.error("Seu navegador não permite gravacao de audio.");
       return;
     }
 
@@ -554,7 +568,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           await sendAudioBlob(blob);
         } catch (err) {
           console.error("Erro ao finalizar gravacao:", err);
-          toast.error("Nao foi possivel enviar o audio.");
+          toast.error("Não foi possivel enviar o audio.");
         } finally {
           setIsRecording(false);
           setIsSendingAudio(false);
@@ -568,7 +582,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       setRecordSeconds(0);
     } catch (err) {
       console.error("Erro ao iniciar gravacao:", err);
-      toast.error("Nao foi possivel acessar o microfone.");
+      toast.error("Não foi possivel acessar o microfone.");
       stopStreamTracks();
       setIsRecording(false);
     }
@@ -577,6 +591,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const stopRecording = () => {
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state === "inactive") return;
+    setIsRecording(false);
     recorder.stop();
   };
 
@@ -637,6 +652,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       return;
     }
 
+    setShowAttachments(false);
+
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -667,7 +684,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
     if (validImages.length < allFiles.length) {
       console.warn("Alguns arquivos foram ignorados por não serem JPG/PNG.");
-      toast.info("Algumas imagens foram ignoradas por nao serem JPG ou PNG.");
+      toast.info("Algumas imagens foram ignoradas por não serem JPG ou PNG.");
     }
 
     try {
@@ -723,7 +740,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       });
     } catch (err) {
       console.error("Erro ao enviar áudio:", err);
-      toast.error("Nao foi possivel enviar o audio.");
+      toast.error("Não foi possivel enviar o audio.");
     } finally {
       e.target.value = "";
     }
@@ -736,6 +753,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       e.target.value = "";
       return;
     }
+
+    setShowAttachments(false);
 
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -769,7 +788,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       setMessage("");
     } catch (err) {
       console.error("Erro ao enviar documento:", err);
-      toast.error("Nao foi possivel enviar o documento.");
+      toast.error("Não foi possivel enviar o documento.");
     } finally {
       e.target.value = "";
     }
@@ -799,8 +818,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      {isRecording && !disabled && (
-        <div className="flex items-center gap-2 mb-2 text-sm text-[#1F2937]">
+      {false && isRecording && !disabled && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-[#1F2937]">
           <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
           <span className="font-medium">Gravando...</span>
           <span className="text-[#6B7280]">
@@ -812,13 +831,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="relative flex items-end gap-2">
-        <div className="flex gap-2">
+      <form
+        onSubmit={handleSubmit}
+        className="relative flex items-stretch gap-2"
+      >
+        <div className="flex shrink-0 gap-2">
           <button
             type="button"
             onClick={handleAttachmentClick}
             disabled={disabled}
-            className="relative p-2 hover:bg-[#E5E7EB] rounded-lg transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
+            className="relative flex h-12 w-12 items-center justify-center rounded-lg hover:bg-[#E5E7EB] transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
           >
             <PaperclipIcon className="w-5 h-5 text-gray-500" />
 
@@ -891,7 +913,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               setShowEmojis((v) => !v);
               setShowAttachments(false);
             }}
-            className="p-2 hover:bg-[#E5E7EB] rounded-lg transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
+            className="flex h-12 w-12 items-center justify-center rounded-lg hover:bg-[#E5E7EB] transition-colors disabled:opacity-50 disabled:hover:bg-transparent"
           >
             <SmileIcon className="w-5 h-5 text-gray-500" />
           </button>
@@ -904,13 +926,13 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           placeholder={placeholderText}
           rows={1}
           disabled={disabled}
-          className="flex-1 px-4 py-3 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0A84FF] focus:border-transparent resize-none max-h-32 disabled:bg-[#F9FAFB] disabled:text-[#9CA3AF] disabled:cursor-not-allowed"
+          className="min-h-12 flex-1 rounded-lg border border-[#E5E7EB] px-4 py-3 resize-none max-h-32 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#0A84FF] disabled:cursor-not-allowed disabled:bg-[#F9FAFB] disabled:text-[#9CA3AF]"
         />
 
         <Button
           type="button"
           variant="primary"
-          className={`px-4 ${
+          className={`h-12 min-h-12 shrink-0 px-4 ${
             isRecording ? "bg-red-500 hover:bg-red-600 focus:ring-red-500" : ""
           }`}
           disabled={disabled || isSendingAudio}

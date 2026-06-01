@@ -124,7 +124,6 @@ export const Inbox: React.FC = () => {
       icon: MegaphoneIcon,
       path: "/inbox/marketing-campaigns",
     },
-    // ✅ ADICIONADO O ITEM NO MENU LATERAL
     {
       label: "Mensagens em massa",
       icon: SendToBack,

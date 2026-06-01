@@ -321,7 +321,8 @@ const formatVariablesExample = (variables: unknown[]) =>
 const mapTemplateToView = (template: MessageTemplate): TemplateView => ({
   id: template.id,
   internalName: template.name,
-  metaName: template.meta_template_name ?? normalizeMetaTemplateName(template.name),
+  metaName:
+    template.meta_template_name ?? normalizeMetaTemplateName(template.name),
   category: template.category,
   language: template.language_code,
   status: template.status,
@@ -400,7 +401,9 @@ const mapCampaignToView = (campaign: CampaignWithTemplate): CampaignView => {
   };
 };
 
-const mapRecipientToView = (recipient: CampaignRecipient): CampaignRecipientView => ({
+const mapRecipientToView = (
+  recipient: CampaignRecipient,
+): CampaignRecipientView => ({
   id: recipient.id,
   campaignId: recipient.campaign_id,
   name: recipient.contact?.name ?? recipient.phone ?? "Contato sem nome",
@@ -535,7 +538,9 @@ const EmptyState = ({
 }) => (
   <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
     <p className="text-base font-semibold text-slate-900">{title}</p>
-    <p className="mx-auto mt-2 max-w-2xl text-sm text-slate-500">{description}</p>
+    <p className="mx-auto mt-2 max-w-2xl text-sm text-slate-500">
+      {description}
+    </p>
     {action ? <div className="mt-5">{action}</div> : null}
   </div>
 );
@@ -626,8 +631,7 @@ export const MarketingCampaignsPage: React.FC = () => {
 
   const { template: selectedTemplateDetail, loading: selectedTemplateLoading } =
     useTemplate(clinicId, selectedTemplateId, {
-      enabled:
-        templateModalMode === "edit" || templateModalMode === "view",
+      enabled: templateModalMode === "edit" || templateModalMode === "view",
     });
 
   const { campaign: selectedCampaignDetail, loading: selectedCampaignLoading } =
@@ -689,11 +693,15 @@ export const MarketingCampaignsPage: React.FC = () => {
   );
 
   const templateSummary = useMemo(() => {
-    const approved = templates.filter((item) => item.status === "approved").length;
+    const approved = templates.filter(
+      (item) => item.status === "approved",
+    ).length;
     const pending = templates.filter(
       (item) => item.status === "pending" || item.status === "submitted",
     ).length;
-    const rejected = templates.filter((item) => item.status === "rejected").length;
+    const rejected = templates.filter(
+      (item) => item.status === "rejected",
+    ).length;
 
     return {
       total: templates.length,
@@ -862,7 +870,7 @@ export const MarketingCampaignsPage: React.FC = () => {
 
   const handleSaveTemplate = async () => {
     if (!clinicId) {
-      toast.error("Clinica nao identificada.");
+      toast.error("Clinica não identificada.");
       return;
     }
 
@@ -902,7 +910,9 @@ export const MarketingCampaignsPage: React.FC = () => {
       resetTemplateForm();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Nao foi possivel salvar o template.",
+        err instanceof Error
+          ? err.message
+          : "Não foi possivel salvar o template.",
       );
     }
   };
@@ -944,14 +954,16 @@ export const MarketingCampaignsPage: React.FC = () => {
       toast.success("Copia do template criada.");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Nao foi possivel concluir a acao.",
+        err instanceof Error
+          ? err.message
+          : "Não foi possivel concluir a acao.",
       );
     }
   };
 
   const handleSaveCampaign = async () => {
     if (!clinicId) {
-      toast.error("Clinica nao identificada.");
+      toast.error("Clinica não identificada.");
       return;
     }
 
@@ -996,7 +1008,9 @@ export const MarketingCampaignsPage: React.FC = () => {
       setActiveTab("campaigns");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Nao foi possivel salvar a campanha.",
+        err instanceof Error
+          ? err.message
+          : "Não foi possivel salvar a campanha.",
       );
     }
   };
@@ -1022,7 +1036,9 @@ export const MarketingCampaignsPage: React.FC = () => {
       toast.success("Copia da campanha criada.");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Nao foi possivel duplicar a campanha.",
+        err instanceof Error
+          ? err.message
+          : "Não foi possivel duplicar a campanha.",
       );
     }
   };
@@ -1033,7 +1049,9 @@ export const MarketingCampaignsPage: React.FC = () => {
       toast.success("Campanha cancelada.");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Nao foi possivel cancelar a campanha.",
+        err instanceof Error
+          ? err.message
+          : "Não foi possivel cancelar a campanha.",
       );
     }
   };
@@ -1076,7 +1094,7 @@ export const MarketingCampaignsPage: React.FC = () => {
     return (
       <div className="flex h-full flex-col bg-slate-50 px-8 py-8">
         <EmptyState
-          title="Clinica nao identificada"
+          title="Clinica não identificada"
           description="Aguarde o carregamento da clinica atual para gerenciar templates e campanhas."
         />
       </div>
@@ -1218,7 +1236,9 @@ export const MarketingCampaignsPage: React.FC = () => {
                               {template.language}
                             </td>
                             <td className="py-4 pr-4">
-                              <StatusBadge {...templateStatusMap[template.status]} />
+                              <StatusBadge
+                                {...templateStatusMap[template.status]}
+                              />
                             </td>
                             <td className="py-4 pr-4 text-sm text-slate-600">
                               {formatDateTime(template.updatedAt)}
@@ -1227,11 +1247,15 @@ export const MarketingCampaignsPage: React.FC = () => {
                               <div className="flex min-w-[320px] flex-wrap gap-x-4 gap-y-2">
                                 <TableAction
                                   label="Visualizar"
-                                  onClick={() => openTemplateModal("view", template)}
+                                  onClick={() =>
+                                    openTemplateModal("view", template)
+                                  }
                                 />
                                 <TableAction
                                   label="Editar"
-                                  onClick={() => openTemplateModal("edit", template)}
+                                  onClick={() =>
+                                    openTemplateModal("edit", template)
+                                  }
                                 />
                                 <TableAction
                                   label="Enviar para Meta"
@@ -1388,7 +1412,9 @@ export const MarketingCampaignsPage: React.FC = () => {
                                 {campaign.audienceLabel}
                               </td>
                               <td className="py-4 pr-4">
-                                <StatusBadge {...campaignStatusMap[campaign.status]} />
+                                <StatusBadge
+                                  {...campaignStatusMap[campaign.status]}
+                                />
                               </td>
                               <td className="py-4 pr-4 text-sm text-slate-600">
                                 {formatDateTime(campaign.sendAt)}
@@ -1409,11 +1435,15 @@ export const MarketingCampaignsPage: React.FC = () => {
                                 <div className="flex min-w-[290px] flex-wrap gap-x-4 gap-y-2">
                                   <TableAction
                                     label="Ver metricas"
-                                    onClick={() => setMetricsCampaignId(campaign.id)}
+                                    onClick={() =>
+                                      setMetricsCampaignId(campaign.id)
+                                    }
                                   />
                                   <TableAction
                                     label="Editar"
-                                    onClick={() => openCampaignModal("edit", campaign)}
+                                    onClick={() =>
+                                      openCampaignModal("edit", campaign)
+                                    }
                                   />
                                   <TableAction
                                     label="Duplicar"
@@ -1474,7 +1504,10 @@ export const MarketingCampaignsPage: React.FC = () => {
                         templateForm.internalName,
                       );
 
-                      handleTemplateFieldChange("internalName", nextInternalName);
+                      handleTemplateFieldChange(
+                        "internalName",
+                        nextInternalName,
+                      );
 
                       if (
                         !metaNameManuallyEdited ||
@@ -1520,11 +1553,13 @@ export const MarketingCampaignsPage: React.FC = () => {
                     disabled={templateModalMode === "view"}
                     className={inputClassName}
                   >
-                    {Object.entries(templateCategoryMap).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
+                    {Object.entries(templateCategoryMap).map(
+                      ([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ),
+                    )}
                   </select>
                 </Field>
                 <Field label="Idioma">
@@ -1611,7 +1646,10 @@ export const MarketingCampaignsPage: React.FC = () => {
                   <textarea
                     value={templateForm.buttonsText}
                     onChange={(event) =>
-                      handleTemplateFieldChange("buttonsText", event.target.value)
+                      handleTemplateFieldChange(
+                        "buttonsText",
+                        event.target.value,
+                      )
                     }
                     disabled={templateModalMode === "view"}
                     rows={3}
@@ -1664,7 +1702,8 @@ export const MarketingCampaignsPage: React.FC = () => {
               <div className="mt-5 space-y-3 text-sm text-slate-600">
                 <div className="flex items-center gap-2">
                   <CheckCircle2Icon className="h-4 w-4 text-emerald-600" />
-                  Conteudo pronto para revisao antes de qualquer integracao externa.
+                  Conteudo pronto para revisao antes de qualquer integracao
+                  externa.
                 </div>
               </div>
             </Card>
@@ -1693,7 +1732,9 @@ export const MarketingCampaignsPage: React.FC = () => {
       {campaignModalMode ? (
         <ModalShell
           title={
-            campaignModalMode === "create" ? "Criar campanha" : "Editar campanha"
+            campaignModalMode === "create"
+              ? "Criar campanha"
+              : "Editar campanha"
           }
           subtitle="Monte uma campanha em etapas simples usando apenas modelos aprovados pela Meta."
           onClose={resetCampaignForm}
@@ -1780,14 +1821,18 @@ export const MarketingCampaignsPage: React.FC = () => {
                   ) : (
                     <div className="grid gap-3">
                       {approvedTemplates.map((template) => {
-                        const isSelected = campaignForm.templateId === template.id;
+                        const isSelected =
+                          campaignForm.templateId === template.id;
 
                         return (
                           <button
                             key={template.id}
                             type="button"
                             onClick={() =>
-                              handleCampaignFieldChange("templateId", template.id)
+                              handleCampaignFieldChange(
+                                "templateId",
+                                template.id,
+                              )
                             }
                             className={`rounded-3xl border p-4 text-left transition ${
                               isSelected
@@ -1868,7 +1913,10 @@ export const MarketingCampaignsPage: React.FC = () => {
                       <input
                         value={campaignForm.tagLabel}
                         onChange={(event) =>
-                          handleCampaignFieldChange("tagLabel", event.target.value)
+                          handleCampaignFieldChange(
+                            "tagLabel",
+                            event.target.value,
+                          )
                         }
                         className={inputClassName}
                         placeholder="Ex: Clientes VIP"
@@ -1929,7 +1977,8 @@ export const MarketingCampaignsPage: React.FC = () => {
                   >
                     <p className="font-semibold text-slate-900">Agendar</p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Programe a data e hora para a proxima janela interna de envio.
+                      Programe a data e hora para a proxima janela interna de
+                      envio.
                     </p>
                   </button>
 
@@ -1971,7 +2020,9 @@ export const MarketingCampaignsPage: React.FC = () => {
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-500">Publico</p>
+                    <p className="text-sm font-medium text-slate-500">
+                      Publico
+                    </p>
                     <p className="mt-1 font-semibold text-slate-900">
                       {buildAudienceLabel(campaignForm)}
                     </p>
@@ -2006,7 +2057,9 @@ export const MarketingCampaignsPage: React.FC = () => {
             </div>
 
             <Card className="h-fit rounded-3xl p-5">
-              <h3 className="font-semibold text-slate-900">Resumo da campanha</h3>
+              <h3 className="font-semibold text-slate-900">
+                Resumo da campanha
+              </h3>
               <div className="mt-4 space-y-4 text-sm text-slate-600">
                 <div className="rounded-2xl bg-slate-50 p-4">
                   <p className="font-medium text-slate-900">Template</p>
@@ -2048,8 +2101,8 @@ export const MarketingCampaignsPage: React.FC = () => {
                 type="button"
                 variant="ghost"
                 onClick={() =>
-                  setCampaignStep((current) =>
-                    Math.max(1, current - 1) as CampaignWizardStep,
+                  setCampaignStep(
+                    (current) => Math.max(1, current - 1) as CampaignWizardStep,
                   )
                 }
                 disabled={campaignStep === 1}
@@ -2060,8 +2113,9 @@ export const MarketingCampaignsPage: React.FC = () => {
                 <Button
                   type="button"
                   onClick={() =>
-                    setCampaignStep((current) =>
-                      Math.min(5, current + 1) as CampaignWizardStep,
+                    setCampaignStep(
+                      (current) =>
+                        Math.min(5, current + 1) as CampaignWizardStep,
                     )
                   }
                   disabled={!canAdvanceCampaignStep()}
@@ -2104,21 +2158,30 @@ export const MarketingCampaignsPage: React.FC = () => {
                   <SummaryCard
                     label="Taxa de entrega"
                     value={formatPercent(
-                      makeRate(metricsCampaign.delivered, metricsCampaign.totalContacts),
+                      makeRate(
+                        metricsCampaign.delivered,
+                        metricsCampaign.totalContacts,
+                      ),
                     )}
                     hint={`${metricsCampaign.delivered} entregues de ${metricsCampaign.totalContacts}.`}
                   />
                   <SummaryCard
                     label="Taxa de leitura"
                     value={formatPercent(
-                      makeRate(metricsCampaign.read, metricsCampaign.totalContacts),
+                      makeRate(
+                        metricsCampaign.read,
+                        metricsCampaign.totalContacts,
+                      ),
                     )}
                     hint={`${metricsCampaign.read} mensagens lidas.`}
                   />
                   <SummaryCard
                     label="Taxa de resposta"
                     value={formatPercent(
-                      makeRate(metricsCampaign.replied, metricsCampaign.totalContacts),
+                      makeRate(
+                        metricsCampaign.replied,
+                        metricsCampaign.totalContacts,
+                      ),
                     )}
                     hint={`${metricsCampaign.replied} respostas registradas.`}
                   />
@@ -2140,9 +2203,13 @@ export const MarketingCampaignsPage: React.FC = () => {
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-500">Status</p>
+                      <p className="text-sm font-medium text-slate-500">
+                        Status
+                      </p>
                       <div className="mt-1">
-                        <StatusBadge {...campaignStatusMap[metricsCampaign.status]} />
+                        <StatusBadge
+                          {...campaignStatusMap[metricsCampaign.status]}
+                        />
                       </div>
                     </div>
                     <div>
@@ -2150,17 +2217,22 @@ export const MarketingCampaignsPage: React.FC = () => {
                         Template usado
                       </p>
                       <p className="mt-1 font-semibold text-slate-900">
-                        {metricsCampaign.template?.internalName ?? "Template removido"}
+                        {metricsCampaign.template?.internalName ??
+                          "Template removido"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-500">Publico</p>
+                      <p className="text-sm font-medium text-slate-500">
+                        Publico
+                      </p>
                       <p className="mt-1 font-semibold text-slate-900">
                         {metricsCampaign.audienceLabel}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-500">Criada em</p>
+                      <p className="text-sm font-medium text-slate-500">
+                        Criada em
+                      </p>
                       <p className="mt-1 font-semibold text-slate-900">
                         {formatDateTime(metricsCampaign.createdAt)}
                       </p>
@@ -2198,7 +2270,9 @@ export const MarketingCampaignsPage: React.FC = () => {
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-500">Total lido</p>
+                      <p className="text-sm font-medium text-slate-500">
+                        Total lido
+                      </p>
                       <p className="mt-1 font-semibold text-slate-900">
                         {metricsCampaign.read}
                       </p>
@@ -2276,7 +2350,7 @@ export const MarketingCampaignsPage: React.FC = () => {
                                   : "—"}
                               </td>
                               <td className="py-4 pr-4 text-sm text-slate-600">
-                                {recipient.replied ? "Sim" : "Nao"}
+                                {recipient.replied ? "Sim" : "Não"}
                               </td>
                               <td className="py-4 pr-4 text-sm text-slate-600">
                                 {recipient.conversation}
@@ -2306,8 +2380,8 @@ export const MarketingCampaignsPage: React.FC = () => {
           ) : (
             <div className="px-6 py-6">
               <EmptyState
-                title="Campanha nao encontrada"
-                description="Nao foi possivel carregar os detalhes desta campanha."
+                title="Campanha não encontrada"
+                description="Não foi possivel carregar os detalhes desta campanha."
               />
             </div>
           )}

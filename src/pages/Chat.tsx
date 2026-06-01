@@ -79,12 +79,34 @@ function get24hBlockMessage(channel: Channel) {
   return "Não foi possível enviar: essa conversa está fora da janela de atendimento. Envie um template (quando aplicável) ou aguarde o cliente responder.";
 }
 
-function getSendFunctionName(channel: Channel) {
-  return channel === "whatsapp"
-    ? "send-whatsapp-message"
-    : channel === "messenger" || channel === "instagram"
-      ? "send-meta-message"
-      : null;
+function formatRecordTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getSendFunctionName(channel: string, provider?: string) {
+  switch (channel) {
+    case "whatsapp": {
+      switch (provider) {
+        case "meta":
+          return "send-whatsapp-message";
+
+        case "evolution":
+          return "send-evoluation-message";
+
+        default:
+          throw new Error(`Unsupported WhatsApp provider: ${provider}`);
+      }
+    }
+
+    case "instagram":
+    case "messenger":
+      return "send-meta-message";
+
+    default:
+      throw new Error(`Unsupported channel: ${channel}`);
+  }
 }
 
 function normalizeInput(input: SendableInput) {
@@ -136,6 +158,11 @@ export const Chat: React.FC = () => {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(true);
   const [draftMessage, setDraftMessage] = useState("");
+  const [recordingUiState, setRecordingUiState] = useState({
+    isRecording: false,
+    isSendingAudio: false,
+    recordSeconds: 0,
+  });
 
   const [isManageTagsOpen, setIsManageTagsOpen] = useState(false);
   const [availableTags, setAvailableTags] = useState<UiTag[]>([]);
@@ -167,6 +194,26 @@ export const Chat: React.FC = () => {
     error: eventsError,
   } = useConversationEvents(id ?? null);
 
+  const getAccessibleDepartmentIds = useCallback(async (): Promise<
+    string[]
+  > => {
+    if (!clinicId || !authUser) return [];
+
+    const { data, error } = await supabase
+      .from("department_members")
+      .select("department_id")
+      .eq("clinic_user_id", authUser.id);
+
+    if (!error) {
+      const ids = (data ?? [])
+        .map((row: any) => row.department_id)
+        .filter(Boolean);
+      if (ids.length > 0) return ids;
+    }
+
+    return membership?.department_id ? [membership.department_id] : [];
+  }, [authUser, clinicId, membership?.department_id]);
+
   const timelineItems = useMemo(() => {
     const messageItems = messages.map((message) => ({
       kind: "message" as const,
@@ -195,6 +242,11 @@ export const Chat: React.FC = () => {
     setLoadingConversation(true);
     setRefreshingConversation(false);
     setDraftMessage("");
+    setRecordingUiState({
+      isRecording: false,
+      isSendingAudio: false,
+      recordSeconds: 0,
+    });
   }, [id]);
 
   const getContainerMetrics = () => {
@@ -337,7 +389,7 @@ export const Chat: React.FC = () => {
       const requestId = ++conversationLoadRequestRef.current;
 
       if (!requestedId) return;
-      if (!clinicId || !departmentId) {
+      if (!clinicId) {
         if (
           requestId !== conversationLoadRequestRef.current ||
           activeRouteConversationIdRef.current !== requestedId
@@ -355,6 +407,21 @@ export const Chat: React.FC = () => {
       if (shouldHardLoad) setLoadingConversation(true);
       else if (!silent) setRefreshingConversation(true);
 
+      const accessibleDepartmentIds = await getAccessibleDepartmentIds();
+      if (accessibleDepartmentIds.length === 0) {
+        if (
+          requestId !== conversationLoadRequestRef.current ||
+          activeRouteConversationIdRef.current !== requestedId
+        ) {
+          return;
+        }
+        setConversation(null);
+        setLoadingConversation(false);
+        setRefreshingConversation(false);
+        didInitialConversationLoadRef.current = true;
+        return;
+      }
+
       const { data, error } = await supabase
         .from("conversations")
         .select(
@@ -362,14 +429,13 @@ export const Chat: React.FC = () => {
         id,
         status,
         channel,
+        channel_connections (
+          provider
+        ),
         last_message_at,
         created_at,
         assigned_user_id,
-        contacts:contact_id (
-          id,
-          name,
-          phone
-        ),
+        contacts:contact_id (*),
         messages (
           id,
           text,
@@ -391,7 +457,7 @@ export const Chat: React.FC = () => {
         )
         .eq("id", requestedId)
         .eq("clinic_id", clinicId)
-        .eq("department_id", departmentId)
+        .in("department_id", accessibleDepartmentIds)
         .maybeSingle();
 
       if (
@@ -432,6 +498,12 @@ export const Chat: React.FC = () => {
       const contactRow = Array.isArray(rawContacts)
         ? rawContacts[0]
         : rawContacts;
+      const contactAvatar =
+        contactRow?.avatar ??
+        contactRow?.avatar_url ??
+        contactRow?.photo_url ??
+        contactRow?.profile_pic_url ??
+        contactRow?.image_url;
 
       const ct = ((data as any).conversation_tags as any[]) ?? [];
       const tagsFromConv: UiTag[] = ct
@@ -449,9 +521,11 @@ export const Chat: React.FC = () => {
         clinicId: (data as any).clinic_id ?? undefined,
         channel: (data as any).channel as Channel,
         status: ((data as any).status as Conversation["status"]) ?? "pending",
+        provider: (data as any).channel_connections?.provider ?? undefined,
         contactName:
           contactRow?.name ?? contactRow?.phone ?? "Contato sem nome",
         contactNumber: contactRow?.phone ?? "",
+        contactAvatar: contactAvatar ?? undefined,
         lastMessage: last?.text ?? "",
         lastMessageType: (last as any)?.type ?? "text",
         lastTimestamp:
@@ -470,7 +544,7 @@ export const Chat: React.FC = () => {
       setRefreshingConversation(false);
       didInitialConversationLoadRef.current = true;
     },
-    [id, clinicId, departmentId],
+    [id, clinicId, getAccessibleDepartmentIds],
   );
 
   useEffect(() => {
@@ -602,9 +676,7 @@ export const Chat: React.FC = () => {
     await loadConversation();
 
     if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("inbox:tab", { detail: "open" }),
-      );
+      window.dispatchEvent(new CustomEvent("inbox:tab", { detail: "open" }));
     }
     setAcceptingConversation(false);
   }, [id, loadConversation]);
@@ -736,8 +808,8 @@ export const Chat: React.FC = () => {
       return conversation.assignedTo === authUser.id;
     }
 
-    return !!departmentId;
-  }, [authUser, conversation, departmentId]);
+    return true;
+  }, [authUser, conversation]);
 
   const createSendNonce = useCallback(async (conversationId: string) => {
     const { data, error } = await supabase.functions.invoke(
@@ -784,7 +856,11 @@ export const Chat: React.FC = () => {
       const { tempId, input } = opts;
 
       const lastInboundAt = getLastInboundClientAt(messages);
-      const canSend = isInside24hWindow(lastInboundAt);
+
+      const isMetaProvider = conversation.provider === "meta";
+      const canSend = !isMetaProvider || isInside24hWindow(lastInboundAt);
+
+      console.log(canSend);
 
       if (!canSend) {
         // mantém a mensagem e marca como falha (não some)
@@ -796,6 +872,7 @@ export const Chat: React.FC = () => {
         toast.info(get24hBlockMessage(conversation.channel), {
           autoClose: 4500,
         });
+
         return;
       }
 
@@ -816,7 +893,12 @@ export const Chat: React.FC = () => {
         return;
       }
 
-      const functionName = getSendFunctionName(conversation.channel);
+      console.log("props", conversation);
+
+      const functionName = getSendFunctionName(
+        conversation.channel,
+        conversation.provider,
+      );
       if (!functionName) {
         markLocalMessage(tempId, {
           localStatus: "failed",
@@ -865,9 +947,13 @@ export const Chat: React.FC = () => {
 
       const inserted = (data as any)?.message;
       if (!inserted) {
+        console.warn(
+          `Envio concluido sem mensagem persistida imediata (${functionName}). Aguardando sincronizacao pelo realtime.`,
+          data,
+        );
         markLocalMessage(tempId, {
-          localStatus: "failed",
-          localError: "Envio não retornou confirmação. Reenviar.",
+          localStatus: "sent",
+          localError: null,
         });
         return;
       }
@@ -1005,7 +1091,7 @@ export const Chat: React.FC = () => {
 
       if (error) {
         console.error("Erro ao reprocessar transcricao:", error);
-        toast.error("Nao foi possivel reprocessar a transcricao.");
+        toast.error("Não foi possivel reprocessar a transcricao.");
         return;
       }
 
@@ -1030,14 +1116,16 @@ export const Chat: React.FC = () => {
   }
 
   const showConversationNotFound =
-    !loadingConversation && !conversation && didInitialConversationLoadRef.current;
+    !loadingConversation &&
+    !conversation &&
+    didInitialConversationLoadRef.current;
 
   if (showConversationNotFound) {
     return (
       <div className="flex items-center justify-center h-full w-full bg-white">
         <div className="text-center">
           <h3 className="text-lg font-medium text-[#1E1E1E] mb-2">
-            Conversa nao encontrada
+            Conversa não encontrada
           </h3>
           <Button variant="primary" onClick={() => navigate("/inbox")}>
             Voltar para Conversas
@@ -1133,6 +1221,31 @@ export const Chat: React.FC = () => {
         </button>
       )}
 
+      {(recordingUiState.isRecording || recordingUiState.isSendingAudio) && (
+        <div className="pointer-events-none absolute bottom-40 left-1/2 z-40 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          <div className="rounded-xl border border-red-100 bg-white/95 px-4 py-3 text-sm text-[#1F2937] shadow-lg backdrop-blur">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
+              <span className="font-medium">
+                {recordingUiState.isSendingAudio
+                  ? "Enviando audio..."
+                  : "Gravando..."}
+              </span>
+              {recordingUiState.isRecording && (
+                <span className="text-[#6B7280]">
+                  {formatRecordTime(recordingUiState.recordSeconds)}
+                </span>
+              )}
+            </div>
+            {recordingUiState.isRecording && (
+              <p className="mt-1 text-xs text-[#6B7280]">
+                Toque no botão de envio para concluir e enviar.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {isManageTagsOpen && (
         <div className="fixed inset-0 z-[9999]">
           <div
@@ -1225,6 +1338,7 @@ export const Chat: React.FC = () => {
           onDraftChange={setDraftMessage}
           quickMessages={quickMessages}
           quickMessagesLoading={loadingQuickMessages}
+          onRecordingStateChange={setRecordingUiState}
         />
       )}
     </div>

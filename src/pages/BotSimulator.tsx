@@ -143,7 +143,7 @@ export const BotSimulator = ({
     if (!nextNodeId) {
       setHistory((prev) => [
         ...prev,
-        { role: "system", text: "Etapa de destino nao definida." },
+        { role: "system", text: "Etapa de destino não definida." },
       ]);
       setEnded(true);
       return;
@@ -238,7 +238,7 @@ export const BotSimulator = ({
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Simulador</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Preview local do fluxo (nao chama o bot-engine).
+              Preview local do fluxo (não chama o bot-engine).
             </p>
           </div>
           <div className="flex items-center gap-2">

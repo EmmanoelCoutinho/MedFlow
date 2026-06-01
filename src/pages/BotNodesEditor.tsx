@@ -75,7 +75,7 @@ const getEndSessionControlState = (
     return {
       disabled: true,
       helper:
-        "Desativado porque uma opcao com proxima etapa nao pode encerrar a Sessão.",
+        "Desativado porque uma opcao com proxima etapa não pode encerrar a Sessão.",
     };
   }
 
@@ -311,7 +311,7 @@ export const BotNodesEditor = ({
   const handleDeleteNode = async (node: BotNodeRow) => {
     if (!isAdmin) return toast.error("Você não tem permissão para esta ação.");
     if (node.node_key === BOT_ROOT_NODE_KEY) {
-      return toast.error("A etapa inicial nao pode ser removida.");
+      return toast.error("A etapa inicial não pode ser removida.");
     }
     const ok = window.confirm(`Remover a etapa "${node.title}"?`);
     if (!ok) return;
