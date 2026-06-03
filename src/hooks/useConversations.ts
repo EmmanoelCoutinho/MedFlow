@@ -89,11 +89,11 @@ export function useConversations(options: UseConversationsOptions = {}) {
       kind === "image"
         ? "Imagem"
         : kind === "audio"
-          ? "Audio"
+          ? "Áudio"
           : kind === "sticker"
             ? "Figurinha"
             : kind === "video"
-              ? "Video"
+              ? "Vídeo"
               : kind === "document"
                 ? "Documento"
                 : "Mensagem";
@@ -104,9 +104,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
     };
   };
 
-  const getAccessibleDepartmentIds = useCallback(async (): Promise<
-    string[]
-  > => {
+  const getAccessibleDepartmentIds = useCallback(async (): Promise<string[]> => {
     if (!clinicId || !authUser) return [];
 
     const { data, error } = await supabase
@@ -121,6 +119,12 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
     return membership?.department_id ? [membership.department_id] : [];
   }, [authUser, clinicId, membership?.department_id]);
+
+  // Guardamos a referência estável para uso interno nos efeitos do Realtime
+  const getAccessibleDeptIdsRef = useRef(getAccessibleDepartmentIds);
+  useEffect(() => {
+    getAccessibleDeptIdsRef.current = getAccessibleDepartmentIds;
+  }, [getAccessibleDepartmentIds]);
 
   const scheduleRefetch = useCallback((fetcher: () => void) => {
     const cooldownMs = 2500;
@@ -249,7 +253,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
           );
         }
 
-        // 1) monta lista sem unread (por enquanto)
         let mapped: Conversation[] =
           data?.map((row: any) => {
             const messages = (row.messages as any[]) ?? [];
@@ -302,7 +305,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
               lastTimestamp:
                 last?.sent_at ?? row.last_message_at ?? row.created_at ?? "",
 
-              // ✅ agora vem do banco (preenchido abaixo)
               unreadCount: 0,
 
               tags,
@@ -310,7 +312,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
             };
           }) ?? [];
 
-        // 2) busca unread em lote no banco e injeta
         const ids = mapped.map((c) => c.id).filter(Boolean);
 
         if (ids.length > 0) {
@@ -360,7 +361,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
     scheduleRefetch(() => fetchConversations({ reason: "refetch" }));
   }, [fetchConversations, scheduleRefetch]);
 
-  // realtime: tags (igual)
+  // realtime: tags
   useEffect(() => {
     if (!authUser) return;
 
@@ -423,16 +424,15 @@ export function useConversations(options: UseConversationsOptions = {}) {
     };
   }, [authUser, scheduleRefetchStable]);
 
-  // realtime: update conversations (igual)
+  // realtime: update conversations 💡 (Corrigido para evitar loop de dependências)
   useEffect(() => {
-    if (!authUser) return;
-    if (!clinicId) return;
+    if (!authUser || !clinicId) return;
 
     let active = true;
     let rtChannel: any = null;
 
-    (async () => {
-      const accessibleDepartmentIds = await getAccessibleDepartmentIds();
+    const initConversationsUpdateChannel = async () => {
+      const accessibleDepartmentIds = await getAccessibleDeptIdsRef.current();
       if (!active) return;
 
       if (!accessibleDepartmentIds.length) {
@@ -516,13 +516,15 @@ export function useConversations(options: UseConversationsOptions = {}) {
         .subscribe((status) => {
           console.log("[RT] conversations UPDATE channel status:", status);
         });
-    })();
+    };
+
+    initConversationsUpdateChannel();
 
     return () => {
       active = false;
       if (rtChannel) supabase.removeChannel(rtChannel);
     };
-  }, [authUser, clinicId, getAccessibleDepartmentIds, scheduleRefetchStable]);
+  }, [authUser, clinicId, scheduleRefetchStable]);
 
   // inicial
   useEffect(() => {
@@ -576,8 +578,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
               lastMessageType: preview.type ?? old.lastMessageType,
               lastTimestamp: msg.sent_at ?? msg.created_at ?? old.lastTimestamp,
 
-              // ✅ não calcula por localStorage; só incrementa "optimistic"
-              // a verdade vem no refetch (get_unread_counts)
               unreadCount: isInbound
                 ? (old.unreadCount ?? 0) + 1
                 : (old.unreadCount ?? 0),
@@ -595,7 +595,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
             return clone;
           });
 
-          // ✅ garante consistência com o banco
           scheduleRefetchStable();
         },
       )
@@ -608,12 +607,10 @@ export function useConversations(options: UseConversationsOptions = {}) {
     };
   }, [authUser, scheduleRefetchStable]);
 
-  // ✅ agora persiste no banco
   const markAsRead = useCallback(
     async (conversationId: string) => {
       if (!authUser) return;
 
-      // otimização visual imediata
       setConversations((current) =>
         current.map((c) =>
           c.id === conversationId ? { ...c, unreadCount: 0 } : c,
