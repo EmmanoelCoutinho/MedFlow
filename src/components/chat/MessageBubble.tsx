@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { DownloadIcon, FileIcon } from "lucide-react";
 import type { Message as UiMessage } from "../../types";
 import { AudioTranscriptStatus } from "./AudioTranscriptStatus";
+import { getSupabaseTransformedImageUrl } from "../../lib/imageUtils";
 
 interface MessageBubbleProps {
   message: UiMessage;
@@ -21,15 +22,6 @@ type LocalMeta = {
   localStatus?: LocalSendStatus;
   localError?: string | null;
 };
-
-const getInitials = (name?: string) =>
-  (name ?? "Cliente")
-    .split(" ")
-    .filter(Boolean)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
 
 const formatTime = (timestamp: string) => {
   const date = new Date(timestamp);
@@ -105,14 +97,11 @@ const parseFilenameFromDocumentText = (text?: string): string | undefined => {
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
-  contactAvatar,
-  contactName,
   onRetry,
   onRetryTranscript,
 }) => {
   const payload = message.payload ?? {};
   const isClient = message.author === "cliente";
-  const initials = getInitials(contactName);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -188,6 +177,23 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const documentAccentClass = getDocumentAccentClass(documentLabel);
 
   const hasMedia = Boolean(mediaUrl);
+  const imageThumbnailUrl =
+    mediaType === "image" && mediaUrl
+      ? getSupabaseTransformedImageUrl(mediaUrl, {
+          width: 384,
+          height: 384,
+          quality: 78,
+          resize: "cover",
+        })
+      : mediaUrl;
+  const imagePreviewUrl =
+    mediaType === "image" && mediaUrl
+      ? getSupabaseTransformedImageUrl(mediaUrl, {
+          width: 1600,
+          quality: 88,
+          resize: "contain",
+        })
+      : mediaUrl;
 
   const onlyAudio = mediaType === "audio";
   const onlyDocument =
@@ -271,30 +277,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           isClient ? "" : "flex-row-reverse"
         }`}
       >
-        {isClient && (
-          <div className="w-8 h-8 rounded-full bg-[#E5E7EB] flex items-center justify-center text-xs font-medium flex-shrink-0 overflow-hidden">
-            {contactAvatar ? (
-              <img
-                src={contactAvatar}
-                alt={`Foto de ${contactName ?? "Cliente"}`}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              initials
-            )}
-          </div>
-        )}
-
         <div className="flex flex-col">
           <div className={bubbleClass}>
             {mediaUrl && (
               <>
                 {mediaType === "image" && (
                   <img
-                    src={mediaUrl}
+                    src={imageThumbnailUrl}
                     alt="Imagem"
                     className="h-48 w-48 cursor-zoom-in rounded-lg object-cover"
-                    onClick={() => setPreviewSrc(mediaUrl)}
+                    onError={(event) => {
+                      if (event.currentTarget.src !== mediaUrl) {
+                        event.currentTarget.src = mediaUrl;
+                      }
+                    }}
+                    onClick={() => setPreviewSrc(imagePreviewUrl ?? mediaUrl)}
                   />
                 )}
 
@@ -399,12 +396,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             {formatTime(message.createdAt)}
           </span>
         </div>
-
-        {!isClient && (
-          <div className="w-8 h-8 rounded-full bg-[#0A84FF] text-white flex items-center justify-center text-xs font-medium flex-shrink-0">
-            AT
-          </div>
-        )}
       </div>
 
       {previewSrc && (

@@ -15,6 +15,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { EmojiPicker } from "./EmojiPicker";
 import { QuickMessagesPicker } from "./QuickMessagesPicker";
 import type { QuickMessage } from "../../services/quickMessages";
+import { compressImageFile } from "../../lib/imageUtils";
 
 type SendableInput =
   | string
@@ -662,6 +663,9 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       file: File;
       mimeType: AllowedImageMime;
       extension: "jpg" | "png";
+      originalSize: number;
+      compressedSize: number;
+      wasCompressed: boolean;
     }> = [];
 
     for (const file of allFiles) {
@@ -669,10 +673,36 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
       if (!realMimeType) continue;
 
+      const compressedImage = await compressImageFile(file, realMimeType);
+
       validImages.push({
-        file,
-        mimeType: realMimeType,
-        extension: realMimeType === "image/png" ? "png" : "jpg",
+        file: compressedImage.file,
+        mimeType: compressedImage.mimeType,
+        extension: compressedImage.extension,
+        originalSize: compressedImage.originalSize,
+        compressedSize: compressedImage.compressedSize,
+        wasCompressed: compressedImage.wasCompressed,
+      });
+    }
+
+    const compressedImagesCount = validImages.filter(
+      (image) => image.wasCompressed,
+    ).length;
+
+    if (compressedImagesCount > 0) {
+      const originalTotal = validImages.reduce(
+        (total, image) => total + image.originalSize,
+        0,
+      );
+      const compressedTotal = validImages.reduce(
+        (total, image) => total + image.compressedSize,
+        0,
+      );
+
+      console.info("[MessageInput] Imagens comprimidas antes do upload:", {
+        count: compressedImagesCount,
+        originalTotal,
+        compressedTotal,
       });
     }
 
