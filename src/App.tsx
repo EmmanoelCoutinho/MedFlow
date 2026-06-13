@@ -1,3 +1,4 @@
+import React, { ReactNode } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -6,13 +7,13 @@ import {
   useLocation,
 } from "react-router-dom";
 import { Login } from "./pages/Login";
+import { ForgotPassword } from "./pages/ForgotPassword"; 
 import { Inbox } from "./pages/Inbox";
 import { Chat } from "./pages/Chat";
 import { Header } from "./components/layout/Header";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { InboxAnalyticsDashboard } from "./pages/InboxAnalyticsDashboard";
 import { Tags } from "./pages/Tags";
-import { ReactNode } from "react";
 import { ClinicProvider } from "./contexts/ClinicContext";
 import { DepartmentsPage } from "./pages/DepartmentsPage";
 import { AttendantsPage } from "./pages/AttendantsPage";
@@ -25,6 +26,8 @@ import { BotsSettingsPage } from "./pages/BotsSettingsPage";
 import { BotEditorPage } from "./pages/BotEditorPage";
 import { QuickMessagesPage } from "./pages/QuickMessagesPage";
 import { MarketingCampaignsPage } from "./pages/MarketingCampaignsPage";
+// 1. IMPORTAR A NOVA PÁGINA DE MENSAGENS EM MASSA
+import { MassMessagesPage } from "./pages/MassMessages"; 
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -58,10 +61,14 @@ const RequireAuth = ({ children }: RequireAuthProps) => {
 
 function RoutedApp() {
   const location = useLocation();
-  const showHeader = location.pathname !== "/login";
+  
+  // Otimizado: Evita exibir o Header em qualquer rota de autenticação/recuperação
+  const authRoutes = ["/login", "/forgot-password", "/auth/callback", "/auth/set-password"];
+  const showHeader = !authRoutes.includes(location.pathname);
   const { loading } = useAuth();
 
-  if (loading && location.pathname !== "/login") {
+  // Garante que o loading não trave a tela se o usuário estiver nas telas públicas de auth
+  if (loading && showHeader) {
     return <AuthLoadingScreen />;
   }
 
@@ -77,9 +84,10 @@ function RoutedApp() {
       >
         <Routes>
           <Route path="/login" element={<Login />} />
-
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/auth/set-password" element={<SetPassword />} />
+          
           <Route
             path="/inbox"
             element={
@@ -98,6 +106,10 @@ function RoutedApp() {
               path="marketing-campaigns"
               element={<MarketingCampaignsPage />}
             />
+            
+            {/* 2. ADICIONADO A ROTA DO MASS MESSAGES DENTRO DO INBOX */}
+            <Route path="mass-messages" element={<MassMessagesPage />} />
+
             <Route
               path="settings/integrations/meta"
               element={<MetaIntegrationsPage />}
@@ -132,7 +144,7 @@ function RoutedApp() {
 
 export function App() {
   return (
-    <BrowserRouter future={{ v7_relativeSplatPath: true }}>
+    <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <AuthProvider>
         <ClinicProvider>
           <ToastContainer position="top-right" autoClose={3000} />

@@ -26,6 +26,8 @@ type AuthContextType = {
   profile: ClinicUser | null;
   loading: boolean; // ✅ apenas bootstrap de sessão
   signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
+  // 1. ADICIONADO A TIPAGEM DO NOVO MÉTODO
+  sendPasswordResetEmail: (email: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 };
 
@@ -90,10 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       console.error("Erro ao carregar clinic_users:", error);
-      // ⚠️ aqui você decide:
-      // - manter o cache antigo (não derruba profile)
-      // - ou limpar (comportamento antigo)
-      // Vou manter mais resiliente: não apaga imediatamente se já tinha.
       if (!profile) {
         setProfile(null);
         writeStorage(STORAGE_PROFILE_KEY, null);
@@ -131,20 +129,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const sessionUser = data.session?.user ?? null;
         setAuthUser(sessionUser);
 
-        // se não tem sessão, limpa profile cache (opcional)
         if (!sessionUser) {
           setProfile(null);
           writeStorage(STORAGE_PROFILE_KEY, null);
           return;
         }
 
-        // ✅ se cache do profile serve, não busca de novo
         if (shouldUseCachedProfile(sessionUser.id)) {
-          // garante que state esteja com o cache atual (caso tenha mudado fora)
           const cached = readStorage<StoredProfile>(STORAGE_PROFILE_KEY);
           if (cached?.profile) setProfile(cached.profile);
         } else {
-          // não bloqueia app esperando profile
           refreshProfile(sessionUser.id);
         }
       } catch (e) {
@@ -180,7 +174,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mountedRef.current = false;
       listener.subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signInWithEmail = async (email: string, password: string) => {
@@ -197,11 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const user = data.user ?? null;
     setAuthUser(user);
-
-    // ✅ libera UI rápido
     setLoading(false);
 
-    // profile em background (ou usa cache se tiver)
     if (user) {
       if (!shouldUseCachedProfile(user.id)) {
         refreshProfile(user.id);
@@ -217,6 +207,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   };
 
+  // 2. ADICIONADA A IMPLEMENTAÇÃO DO MÉTODO DO SUPABASE
+  const sendPasswordResetEmail = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      // O Supabase enviará o token para o seu fluxo de callback já existente (/auth/callback)
+      // que depois redirecionará o usuário logado para redefinir a senha
+      redirectTo: `${window.location.origin}/auth/callback`,
+    });
+    return { error };
+  };
+
   const signOut = async () => {
     setLoading(true);
     await supabase.auth.signOut();
@@ -226,8 +226,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
+  // 3. INCLUÍDO O NOVO MÉTODO NO USEMEMO E NO RETORNO DO PROVIDER
   const value = useMemo(
-    () => ({ authUser, profile, loading, signInWithEmail, signOut }),
+    () => ({ authUser, profile, loading, signInWithEmail, sendPasswordResetEmail, signOut }),
     [authUser, profile, loading]
   );
 
