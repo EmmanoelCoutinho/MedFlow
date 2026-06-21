@@ -1,27 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import {
-  BotIcon,
-  Building2Icon,
-  MegaphoneIcon,
-  MessageCircleIcon,
-  MessageSquareIcon,
-  MessageSquareTextIcon,
-  TagIcon,
-  UsersIcon,
-  Settings2Icon,
-  SendToBack, // ✅ Importado o ícone para Mensagens em Massa
-} from "lucide-react";
-
-import { FiBookOpen } from "react-icons/fi";
+import { Outlet, useNavigate } from "react-router-dom";
+import { MessageSquareIcon } from "lucide-react";
 
 import { Input } from "../components/ui/Input";
 import { Badge } from "../components/ui/Badge";
-
+import { AppSidebar } from "../components/layout/AppSidebar";
 import { ConversationItem } from "../components/inbox/ConversationItem";
 import { ChannelFilter } from "../components/inbox/ChannelFilter";
 import { TagFilter } from "../components/inbox/TagFilter";
-
 import { useConversations } from "../hooks/useConversations";
 import type { Channel } from "../types";
 
@@ -29,7 +15,6 @@ type InboxTab = "open" | "pending";
 
 export const Inbox: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const {
     conversations,
@@ -68,157 +53,47 @@ export const Inbox: React.FC = () => {
   }, []);
 
   const visibleConversations = useMemo(() => {
-    return conversations.filter((c) => c.status !== "closed");
+    return conversations.filter((conversation) => conversation.status !== "closed");
   }, [conversations]);
 
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase();
 
-    return visibleConversations.filter((conv) => {
+    return visibleConversations.filter((conversation) => {
       const matchesSearch =
-        conv.contactName?.toLowerCase().includes(q) ||
-        conv.contactNumber?.includes(q) ||
-        conv.lastMessage?.toLowerCase().includes(q);
+        conversation.contactName?.toLowerCase().includes(query) ||
+        conversation.contactNumber?.includes(query) ||
+        conversation.lastMessage?.toLowerCase().includes(query);
 
       const matchesChannel =
         selectedChannels.length === 0 ||
-        selectedChannels.includes(conv.channel);
+        selectedChannels.includes(conversation.channel);
 
       const matchesTag =
         selectedTagIds.length === 0 ||
-        (conv.tags ?? []).some((t) => selectedTagIds.includes(t.id));
+        (conversation.tags ?? []).some((tag) => selectedTagIds.includes(tag.id));
 
       return matchesSearch && matchesChannel && matchesTag;
     });
   }, [visibleConversations, searchQuery, selectedChannels, selectedTagIds]);
 
   const openConversations = useMemo(() => {
-    return filtered.filter((c) => c.status === "open");
+    return filtered.filter((conversation) => conversation.status === "open");
   }, [filtered]);
 
   const pendingConversations = useMemo(() => {
-    return filtered.filter((c) => c.status === "pending");
+    return filtered.filter((conversation) => conversation.status === "pending");
   }, [filtered]);
 
   const currentList = tab === "open" ? openConversations : pendingConversations;
 
-  const sidebarItems = [
-    {
-      label: "Atendimentos",
-      icon: MessageCircleIcon,
-      path: "/inbox",
-      extraPaths: ["/inbox/chat"],
-    },
-    // { label: "Carteira de contatos", icon: FiBookOpen },
-    { label: "Atendentes", icon: UsersIcon, path: "/inbox/attendants" },
-    { label: "Departamentos", icon: Building2Icon, path: "/inbox/departments" },
-    { label: "Etiquetas", icon: TagIcon, path: "/inbox/tags" },
-    { label: "Bots", icon: BotIcon, path: "/inbox/bots" },
-    {
-      label: "Mensagens rápidas",
-      icon: MessageSquareTextIcon,
-      path: "/inbox/quick-messages",
-    },
-    {
-      label: "Marketing / Campanhas",
-      icon: MegaphoneIcon,
-      path: "/inbox/marketing-campaigns",
-    },
-    {
-      label: "Mensagens em massa",
-      icon: SendToBack,
-      path: "/inbox/mass-messages",
-    },
-  ];
-
   return (
-    // ✅ h-screen garante altura fixa do viewport
-    // ✅ overflow-x-hidden evita cortar scroll vertical sem querer
-    <div className="flex h-screen w-full bg-white overflow-x-hidden">
-      {/* Sidebar (minimizada por padrão, expande no hover) */}
-      <aside className="group w-16 hover:w-64 transition-all duration-200 border-r bg-gray-50 flex flex-col overflow-hidden flex-shrink-0">
-        <div className="p-4 border-b">
-          <div className="flex items-center gap-3">
-            <img
-              src={"/logo-unxet.png"}
-              alt="Logo Unxet"
-              className="h-9 w-9 rounded-md object-contain"
-            />
+    <div className="flex h-screen w-full overflow-x-hidden bg-white">
+      <AppSidebar />
 
-            <div className="overflow-hidden max-w-0 group-hover:max-w-[200px] transition-all duration-200">
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <p className="text-sm font-semibold text-gray-900 leading-tight">
-                  Unxet
-                </p>
-                <p className="text-xs text-gray-500 leading-tight">
-                  Central de mensagens
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* (opcional) se o menu crescer, deixa ele rolar */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto pb-16">
-          {sidebarItems.map((item, index) => {
-            const Icon = item.icon;
-            const active = item.path
-              ? location.pathname === item.path ||
-                (item.extraPaths &&
-                  item.extraPaths.some((p) => location.pathname.startsWith(p)))
-              : index === 0 && location.pathname === "/inbox";
-
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => {
-                  if (item.path) navigate(item.path);
-                }}
-                className={[
-                  "w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  "justify-center group-hover:justify-start",
-                  active
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
-                ].join(" ")}
-                title={item.label}
-              >
-                <Icon className="h-5 w-5 flex-shrink-0" />
-                <span className="whitespace-nowrap overflow-hidden max-w-0 group-hover:max-w-[220px] opacity-0 group-hover:opacity-100 transition-all duration-200">
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-          <div className="p-2 absolute bottom-0 left-0 bg-gray-50 border-r w-inherit group-hover:w-64 transition-all duration-200">
-            <button
-              type="button"
-              onClick={() => navigate("/inbox/settings")}
-              className={[
-                "w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                "justify-center group-hover:justify-start",
-                location.pathname.startsWith("/inbox/settings")
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
-              ].join(" ")}
-              title="Configurações"
-            >
-              <Settings2Icon className="h-5 w-5 flex-shrink-0" />
-              <span className="whitespace-nowrap overflow-hidden max-w-0 group-hover:max-w-[220px] opacity-0 group-hover:opacity-100 transition-all duration-200">
-                Configurações
-              </span>
-            </button>
-          </div>
-        </nav>
-      </aside>
-
-      {/* Sidebar de conversas */}
-      {/* ✅ h-screen + min-h-0: essencial pra overflow funcionar dentro de flex */}
-      <div className="w-96 border-r flex flex-col h-screen min-h-0">
-        {/* ✅ shrink-0 pra esse bloco não “invadir” a área rolável */}
-        <div className="p-4 border-b shrink-0">
-          <div className="flex items-center justify-between mb-4">
+      <div className="flex h-screen min-h-0 w-96 flex-col border-r">
+        <div className="shrink-0 border-b p-4">
+          <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-semibold">Conversas</h2>
             {totalUnreadCount > 0 && (
               <Badge variant="warning">{totalUnreadCount} não lidas</Badge>
@@ -228,7 +103,7 @@ export const Inbox: React.FC = () => {
           <Input
             placeholder="Buscar..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => setSearchQuery(event.target.value)}
             className="mb-3"
           />
 
@@ -242,14 +117,14 @@ export const Inbox: React.FC = () => {
             onChange={setSelectedTagIds}
           />
 
-          <div className="flex items-center mt-3">
+          <div className="mt-3 flex items-center">
             <button
               type="button"
               onClick={() => setTab("open")}
               className={[
-                "flex-1 h-10 text-sm font-medium transition",
+                "h-10 flex-1 text-sm font-medium transition",
                 tab === "open"
-                  ? "text-blue-500 border-blue-500 border-b-4"
+                  ? "border-b-4 border-blue-500 text-blue-500"
                   : "bg-white text-gray-700 hover:bg-gray-50",
               ].join(" ")}
             >
@@ -259,7 +134,7 @@ export const Inbox: React.FC = () => {
                   ({openConversations.length})
                 </span>
                 {totalUnreadOpen > 0 && (
-                  <span className="ml-1 text-xs bg-white/15 px-2 py-0.5 rounded-full">
+                  <span className="ml-1 rounded-full bg-white/15 px-2 py-0.5 text-xs">
                     {totalUnreadOpen}
                   </span>
                 )}
@@ -270,10 +145,10 @@ export const Inbox: React.FC = () => {
               type="button"
               onClick={() => setTab("pending")}
               className={[
-                "flex-1 h-10 text-sm font-medium transition",
+                "h-10 flex-1 text-sm font-medium transition",
                 tab === "pending"
-                  ? "text-blue-500 border-blue-500 border-b-4"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
+                  ? "border-b-4 border-blue-500 text-blue-500"
+                  : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
               ].join(" ")}
             >
               <span className="inline-flex items-center justify-center gap-2">
@@ -282,7 +157,7 @@ export const Inbox: React.FC = () => {
                   ({pendingConversations.length})
                 </span>
                 {totalUnreadPending > 0 && (
-                  <span className="ml-1 text-xs bg-white/15 px-2 py-0.5 rounded-full">
+                  <span className="ml-1 rounded-full bg-white/15 px-2 py-0.5 text-xs">
                     {totalUnreadPending}
                   </span>
                 )}
@@ -291,21 +166,19 @@ export const Inbox: React.FC = () => {
           </div>
         </div>
 
-        {/* Lista */}
-        {/* ✅ min-h-0 aqui também ajuda em alguns layouts */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {isLoading ? (
-            <div className="p-4 space-y-3">
-              {[1, 2, 3].map((i) => (
+            <div className="space-y-3 p-4">
+              {[1, 2, 3].map((item) => (
                 <div
-                  key={i}
-                  className="h-20 bg-gray-200 animate-pulse rounded"
+                  key={item}
+                  className="h-20 animate-pulse rounded bg-gray-200"
                 />
               ))}
             </div>
           ) : currentList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-8 text-center h-full">
-              <MessageSquareIcon className="w-12 h-12 text-gray-300 mb-3" />
+            <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+              <MessageSquareIcon className="mb-3 h-12 w-12 text-gray-300" />
               <p className="font-medium">
                 {tab === "open"
                   ? "Nenhuma conversa aberta"
@@ -317,13 +190,13 @@ export const Inbox: React.FC = () => {
             </div>
           ) : (
             <div className="divide-y pb-20">
-              {currentList.map((conv) => (
+              {currentList.map((conversation) => (
                 <ConversationItem
-                  key={conv.id}
-                  conversation={conv}
+                  key={conversation.id}
+                  conversation={conversation}
                   onClick={() => {
-                    markAsRead(conv.id);
-                    navigate(`/inbox/chat/${conv.id}`);
+                    markAsRead(conversation.id);
+                    navigate(`/inbox/chat/${conversation.id}`);
                   }}
                 />
               ))}
@@ -332,11 +205,10 @@ export const Inbox: React.FC = () => {
         </div>
       </div>
 
-      {/* Conteúdo do chat */}
-      {/* ✅ min-h-0 pra permitir scroll interno do Outlet se precisar */}
-      <div className="flex-1 min-w-0 flex flex-col min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Outlet />
       </div>
     </div>
   );
 };
+
