@@ -6,6 +6,7 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Login } from "./pages/Login";
 import { ForgotPassword } from "./pages/ForgotPassword"; 
 import { Inbox } from "./pages/Inbox";
@@ -26,6 +27,7 @@ import { BotsSettingsPage } from "./pages/BotsSettingsPage";
 import { BotEditorPage } from "./pages/BotEditorPage";
 import { QuickMessagesPage } from "./pages/QuickMessagesPage";
 import { MarketingCampaignsPage } from "./pages/MarketingCampaignsPage";
+import { ContactsPage } from "./pages/Contacts";
 // 1. IMPORTAR A NOVA PÁGINA DE MENSAGENS EM MASSA
 import { MassMessagesPage } from "./pages/MassMessages"; 
 import { ToastContainer } from "react-toastify";
@@ -135,6 +137,14 @@ function RoutedApp() {
               }
             />
           </Route>
+          <Route
+            path="/contacts"
+            element={
+              <RequireAuth>
+                <ContactsPage />
+              </RequireAuth>
+            }
+          />
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
       </main>
@@ -143,14 +153,28 @@ function RoutedApp() {
 }
 
 export function App() {
+  const [queryClient] = React.useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
+
   return (
-    <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-      <AuthProvider>
-        <ClinicProvider>
-          <ToastContainer position="top-right" autoClose={3000} />
-          <RoutedApp />
-        </ClinicProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <AuthProvider>
+          <ClinicProvider>
+            <ToastContainer position="top-right" autoClose={3000} />
+            <RoutedApp />
+          </ClinicProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
