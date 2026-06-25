@@ -120,7 +120,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return membership?.department_id ? [membership.department_id] : [];
   }, [authUser, clinicId, membership?.department_id]);
 
-  // Guardamos a referência estável para uso interno nos efeitos do Realtime
+  // Guardamos referências estáveis para uso interno nos efeitos do Realtime
   const getAccessibleDeptIdsRef = useRef(getAccessibleDepartmentIds);
   useEffect(() => {
     getAccessibleDeptIdsRef.current = getAccessibleDepartmentIds;
@@ -146,6 +146,12 @@ export function useConversations(options: UseConversationsOptions = {}) {
     }, cooldownMs - elapsed);
   }, []);
 
+  // Armazena a contagem atualizada para checagem síncrona dentro do fetcher sem quebrar cache
+  const conversationsLengthRef = useRef(0);
+  useEffect(() => {
+    conversationsLengthRef.current = conversations.length;
+  }, [conversations.length]);
+
   const fetchConversations = useCallback(
     async (opts?: { reason?: "initial" | "refetch" }) => {
       const reason =
@@ -161,7 +167,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
       const shouldShowHardLoading =
         reason === "initial" &&
         !didInitialLoadRef.current &&
-        conversations.length === 0;
+        conversationsLengthRef.current === 0;
 
       if (shouldShowHardLoading) setLoading(true);
       else setRefreshing(true);
@@ -353,13 +359,18 @@ export function useConversations(options: UseConversationsOptions = {}) {
       getAccessibleDepartmentIds,
       options.status,
       options.channel,
-      conversations.length,
     ],
   );
 
   const scheduleRefetchStable = useCallback(() => {
     scheduleRefetch(() => fetchConversations({ reason: "refetch" }));
   }, [fetchConversations, scheduleRefetch]);
+
+  // Encapsulamento em Ref garante que os Realtime Hooks nunca reiniciem por dependência do fetcher
+  const scheduleRefetchRef = useRef(scheduleRefetchStable);
+  useEffect(() => {
+    scheduleRefetchRef.current = scheduleRefetchStable;
+  }, [scheduleRefetchStable]);
 
   // realtime: tags
   useEffect(() => {
@@ -389,7 +400,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
       setConversations((current) => {
         const idx = current.findIndex((c) => c.id === conversationId);
         if (idx === -1) {
-          scheduleRefetchStable();
+          scheduleRefetchRef.current();
           return current;
         }
 
@@ -422,9 +433,9 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUser, scheduleRefetchStable]);
+  }, [authUser]);
 
-  // realtime: update conversations 💡 (Corrigido para evitar loop de dependências)
+  // realtime: update conversations
   useEffect(() => {
     if (!authUser || !clinicId) return;
 
@@ -478,7 +489,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
               }
 
               if (idx === -1) {
-                scheduleRefetchStable();
+                scheduleRefetchRef.current();
                 return current;
               }
 
@@ -509,7 +520,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
               String(prevRow?.assigned_user_id ?? "") !==
                 String(nextRow?.assigned_user_id ?? "")
             ) {
-              scheduleRefetchStable();
+              scheduleRefetchRef.current();
             }
           },
         )
@@ -524,19 +535,19 @@ export function useConversations(options: UseConversationsOptions = {}) {
       active = false;
       if (rtChannel) supabase.removeChannel(rtChannel);
     };
-  }, [authUser, clinicId, scheduleRefetchStable]);
+  }, [authUser, clinicId]);
 
   // inicial
   useEffect(() => {
     if (authLoading) {
-      if (!didInitialLoadRef.current && conversations.length === 0) {
+      if (!didInitialLoadRef.current && conversationsLengthRef.current === 0) {
         setLoading(true);
       }
       return;
     }
 
     fetchConversations({ reason: "initial" });
-  }, [authLoading, fetchConversations, conversations.length]);
+  }, [authLoading, fetchConversations]);
 
   useEffect(() => {
     return () => {
@@ -564,7 +575,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
           setConversations((current) => {
             const idx = current.findIndex((c) => c.id === msg.conversation_id);
             if (idx === -1) {
-              scheduleRefetchStable();
+              scheduleRefetchRef.current();
               return current;
             }
 
@@ -595,7 +606,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
             return clone;
           });
 
-          scheduleRefetchStable();
+          scheduleRefetchRef.current();
         },
       )
       .subscribe((status) => {
@@ -605,7 +616,7 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [authUser, scheduleRefetchStable]);
+  }, [authUser]);
 
   const markAsRead = useCallback(
     async (conversationId: string) => {
@@ -624,10 +635,10 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
       if (error) {
         console.warn("mark_conversation_read falhou:", error);
-        scheduleRefetchStable();
+        scheduleRefetchRef.current();
       }
     },
-    [authUser, scheduleRefetchStable],
+    [authUser],
   );
 
   const totalUnreadCount = useMemo(() => {

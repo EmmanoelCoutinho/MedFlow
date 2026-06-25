@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -72,6 +74,8 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
     if (typeof window === "undefined") return null;
     return sessionStorage.getItem(EDITOR_BOT_ID_STORAGE_KEY);
   });
+  
+  // Se estamos no modo "new", ignoramos qualquer ID antigo
   const botId = !isNew ? (stateBotId ?? persistedBotId) : null;
 
   const [tab, setTab] = useState<EditorTab>("general");
@@ -174,10 +178,14 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
     if (!maxInvalid) return;
 
     if (form.status === "active") {
+      // 🚀 CORREÇÃO AQUI: Passamos explicitamente null ou string vazia se for novo bot, evitamos undefined
+      const botIdToExcept = bot?.id || ""; 
+      
       const activeBotRes = await botsService.findAnotherActiveBot(
         clinicId,
-        bot?.id,
+        botIdToExcept,
       );
+      
       if (activeBotRes.error) {
         toast.error(activeBotRes.error.message);
         return;
@@ -220,6 +228,9 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
     toast.success("Bot salvo.");
 
     if (isNew) {
+      // Sincroniza o ID no Session Storage para evitar que recarregamentos quebrem o estado
+      sessionStorage.setItem(EDITOR_BOT_ID_STORAGE_KEY, res.data.id);
+      
       navigate("/inbox/bots/edit", {
         replace: true,
         state: { botId: res.data.id },
@@ -288,8 +299,7 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
               <p className="text-sm text-gray-500 w-[70%]">
                 Sistema de criação de bots para triagem e atendimento
                 automático. Configure o fluxo de conversa, mensagens e canais de
-                atendimento. Use os bots para automatizar respostas e coletar
-                informações dos pacientes antes do atendimento humano.
+                atendimento.
               </p>
             </div>
 
@@ -358,7 +368,7 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
           </Card>
         ) : tab === "general" ? (
           <div className="space-y-5">
-            {!clinicId ? (
+            {!clinicId && (
               <Card className="p-6">
                 <h2 className="text-lg font-semibold text-gray-900">
                   Empresa não identificada
@@ -367,14 +377,13 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
                   Aguarde o contexto de Empresa carregar para editar o bot.
                 </p>
               </Card>
-            ) : null}
+            )}
 
-            {!isAdmin ? (
+            {!isAdmin && (
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-                Você está em modo somente leitura (apenas administrador pode
-                editar bots).
+                Você está em modo somente leitura (apenas administrador pode editar bots).
               </div>
-            ) : null}
+            )}
 
             <Card className="p-6">
               <div className="flex flex-col gap-5">
@@ -383,8 +392,7 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
                     Dados gerais
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Campos principais usados pelo motor do bot e pela UI de
-                    triagem.
+                    Campos principais usados pelo motor do bot e pela UI de triagem.
                   </p>
                 </div>
 
@@ -416,21 +424,16 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
                     <select
                       value={form.status}
                       onChange={(e) =>
-                        setForm((p) => ({ ...p, status: e.target.value }))
+                        setForm((p) => ({ ...p, status: e.target.value as BotRow["status"] }))
                       }
                       disabled={!isAdmin || saving}
                       className="w-full px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0A84FF] focus:border-transparent bg-white"
                     >
                       <option value="active">Ativo</option>
                       <option value="inactive">Inativo</option>
-                      {form.status !== "active" &&
-                      form.status !== "inactive" ? (
-                        <option value={form.status}>{form.status}</option>
-                      ) : null}
                     </select>
                     <div className="mt-1 text-xs text-slate-500">
-                      Habilita o bot para responder mensagens nos canais
-                      conectados.
+                      Habilita o bot para responder mensagens nos canais conectados.
                     </div>
                   </div>
 
@@ -537,18 +540,7 @@ export const BotEditorPage: React.FC<BotEditorPageProps> = ({ mode }) => {
           />
         ) : tab === "simulator" ? (
           <BotSimulator clinicId={clinicId!} botId={bot!.id} bot={bot!} />
-        ) : (
-          <Card className="p-6">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Em construção
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Esta aba será preenchida nas próximas etapas (simulador).
-              </p>
-            </div>
-          </Card>
-        )}
+        ) : null}
       </div>
     </div>
   );

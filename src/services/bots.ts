@@ -64,13 +64,21 @@ export const botsService = {
     currentBotId?: string | null,
   ): Promise<SupabaseResult<BotRow | null>> {
     try {
-      const { data, error } = await supabase
+      // 1. Monte a query base com as condições fixas
+      let query = supabase
         .from("bots")
         .select("*")
         .eq("clinic_id", clinicId)
         .eq("is_deleted", false)
-        .eq("status", "active")
-        .neq("id", currentBotId ?? "")
+        .eq("status", "active");
+
+      // 2. SÓ adiciona o filtro 'neq' se o ID for válido e não for uma string vazia 🚀
+      if (currentBotId && currentBotId.trim() !== "") {
+        query = query.neq("id", currentBotId);
+      }
+
+      // 3. Aplica o ordenamento, limite e executa
+      const { data, error } = await query
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();

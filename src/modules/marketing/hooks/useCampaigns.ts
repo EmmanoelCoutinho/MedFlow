@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { supabase } from "../../../lib/supabaseClient.ts";
 import {
   cancelCampaign,
   createCampaign,
@@ -26,6 +28,7 @@ export const useCampaigns = (
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Busca inicial convencional
   const refetch = useCallback(async () => {
     if (!clinicId || !enabled) {
       setCampaigns([]);
@@ -50,10 +53,59 @@ export const useCampaigns = (
     }
   }, [clinicId, enabled]);
 
+  // Executa o fetch inicial ao montar o componente ou mudar de clínica
   useEffect(() => {
     refetch();
   }, [refetch]);
 
+  // 💡 Hook do Supabase Realtime com tipagem explícita corrigida
+  useEffect(() => {
+    if (!clinicId || !enabled) return;
+
+    // Se inscreve nas mudanças da tabela 'campaigns' filtrando pela clínica atual
+    const channel = supabase
+      .channel(`realtime-campaigns-${clinicId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // Escuta INSERT, UPDATE e DELETE
+          schema: "public",
+          table: "campaigns",
+          filter: `clinic_id=eq.${clinicId}`, // Otimização para escutar apenas esta clínica
+        },
+        (payload: RealtimePostgresChangesPayload<CampaignWithTemplate>) => {
+          console.log("[RT] Mudança detectada nas campanhas:", payload);
+
+          if (payload.eventType === "INSERT" && payload.new) {
+            const newCampaign = payload.new as CampaignWithTemplate;
+            setCampaigns((current) => {
+              // Evita duplicar se a mutação local já adicionou
+              if (current.some((item) => item.id === newCampaign.id)) return current;
+              return [newCampaign, ...current];
+            });
+          } else if (payload.eventType === "UPDATE" && payload.new) {
+            const updatedCampaign = payload.new as CampaignWithTemplate;
+            setCampaigns((current) =>
+              current.map((item) =>
+                item.id === updatedCampaign.id ? { ...item, ...updatedCampaign } : item
+              )
+            );
+          } else if (payload.eventType === "DELETE" && payload.old) {
+            const deletedId = payload.old.id;
+            setCampaigns((current) => current.filter((item) => item.id !== deletedId));
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log(`[RT] Status do canal de campanhas da clínica ${clinicId}: ${status}`);
+      });
+
+    // ⚠️ CLEANUP: Remove o canal WebSocket quando o componente desmontar ou mudar de clínica
+    return () => {
+      console.log(`[RT] Limpando canal de campanhas da clínica: ${clinicId}`);
+      supabase.removeChannel(channel);
+    };
+  }, [clinicId, enabled]);
   const handleCreateCampaign = useCallback(
     async (input: CreateCampaignInput) => {
       if (!clinicId) throw new Error("Clínica não identificada.");
@@ -61,7 +113,10 @@ export const useCampaigns = (
       setSaving(true);
       try {
         const created = await createCampaign(clinicId, input);
-        setCampaigns((current) => [created, ...current]);
+        setCampaigns((current) => {
+          if (current.some((item) => item.id === created.id)) return current;
+          return [created, ...current];
+        });
         return created;
       } finally {
         setSaving(false);
@@ -118,6 +173,7 @@ export const useCampaigns = (
   };
 };
 
+// Hook individual para monitorar uma campanha específica com Supabase Realtime integrado por ID
 export const useCampaign = (
   clinicId: string | null,
   id: string | null,
@@ -155,6 +211,36 @@ export const useCampaign = (
   useEffect(() => {
     refetch();
   }, [refetch]);
+
+  // 💡 Realtime individual para atualizar o progresso detalhado na tela de detalhes da campanha
+  useEffect(() => {
+    if (!clinicId || !id || !enabled) return;
+
+    const channel = supabase
+      .channel(`realtime-campaign-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "campaigns",
+          filter: `id=eq.${id}`,
+        },
+        (payload: RealtimePostgresChangesPayload<CampaignWithTemplate>) => {
+          if (payload.eventType === "UPDATE" && payload.new) {
+            const updated = payload.new as CampaignWithTemplate;
+            setCampaign((current) => (current ? { ...current, ...updated } : updated));
+          } else if (payload.eventType === "DELETE") {
+            setCampaign(null);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clinicId, id, enabled]);
 
   return {
     campaign,

@@ -1,5 +1,5 @@
 import { useState } from "react";
-// 💡 AJUSTADO: Importa diretamente do seu arquivo cliente oficial existente
+// Importa diretamente do seu arquivo cliente oficial existente
 import { supabase } from "../lib/supabaseClient"; 
 
 export function useMassMessages() {
@@ -13,7 +13,6 @@ export function useMassMessages() {
     setLoading(true);
     try {
       // 1. Buscar os contatos corretos com base no filtro
-      // NOTA: Ajuste o nome da tabela 'contacts' para o nome exato da sua tabela no banco se for diferente
       let query = supabase.from("contacts").select("id, name, phone"); 
 
       if (params.targetType === "tags") {
@@ -43,7 +42,7 @@ export function useMassMessages() {
 
       if (campaignError) throw campaignError;
 
-      // 3. Montar a fila de mensagens individuais substituindo a variável {nome} se existir
+      // 3. Montar a lista de payloads em formato JSON para a fila
       const queueItems = contacts.map((contact) => {
         const personalizedMessage = params.messageTemplate.replace(
           /\{nome\}/gi,
@@ -59,12 +58,27 @@ export function useMassMessages() {
         };
       });
 
-      // 4. Inserir em lote na fila de envios
-      const { error: queueError } = await supabase
-        .from("mass_messages_queue")
-        .insert(queueItems);
+      // 4. Enviar para a nova função com mapeamento de parâmetros nomeados exatos 🚀
+      const { error: queueError } = await supabase.rpc("send_mass_messages_to_queue", {
+        p_queue_name: "mass_messages",
+        p_msgs: queueItems 
+      });
 
-      if (queueError) throw queueError;
+      if (queueError) {
+        console.warn("Falha no envio em lote via RPC, executando fallback individual...", queueError);
+        
+        for (const item of queueItems) {
+          const { error: singleError } = await supabase.rpc("enqueue_message", {
+            queue_name: "mass_messages",
+            msg: item
+          });
+          
+          if (singleError) {
+            console.error("Erro crítico no fallback individual:", singleError);
+            throw singleError;
+          }
+        }
+      }
 
       return { success: true, total: contacts.length };
     } catch (error: any) {
