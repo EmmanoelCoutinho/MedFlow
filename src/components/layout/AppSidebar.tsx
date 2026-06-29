@@ -55,10 +55,12 @@ export const AppSidebar: React.FC = () => {
 
   const isActive = (item: SidebarItem) =>
     location.pathname === item.path ||
-    Boolean(item.extraPaths?.some((path) => location.pathname.startsWith(path)));
+    Boolean(
+      item.extraPaths?.some((path) => location.pathname.startsWith(path)),
+    );
 
   return (
-    <aside className="group relative flex h-full w-16 flex-shrink-0 flex-col overflow-hidden border-r bg-gray-50 transition-all duration-200 hover:w-64">
+    <aside className="group flex h-screen w-16 flex-shrink-0 flex-col overflow-hidden border-r bg-gray-50 transition-all duration-200 hover:w-64">
       <div className="border-b p-4">
         <div className="flex items-center gap-3">
           <img
@@ -79,7 +81,7 @@ export const AppSidebar: React.FC = () => {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-2 pb-16">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-2">
         {sidebarItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item);
@@ -105,28 +107,26 @@ export const AppSidebar: React.FC = () => {
             </button>
           );
         })}
+        <div className="absolute bottom-0 left-0 mt-auto w-16 border-t bg-gray-50 p-2 transition-all duration-200 group-hover:w-64">
+          <button
+            type="button"
+            onClick={() => navigate("/inbox/settings")}
+            className={[
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+              "justify-center group-hover:justify-start",
+              location.pathname.startsWith("/inbox/settings")
+                ? "bg-blue-50 text-blue-700"
+                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+            ].join(" ")}
+            title="Configurações"
+          >
+            <Settings2Icon className="h-5 w-5 flex-shrink-0" />
+            <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[220px] group-hover:opacity-100">
+              Configurações
+            </span>
+          </button>
+        </div>
       </nav>
-
-      <div className="absolute bottom-0 left-0 w-16 border-r bg-gray-50 p-2 transition-all duration-200 group-hover:w-64">
-        <button
-          type="button"
-          onClick={() => navigate("/inbox/settings")}
-          className={[
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-            "justify-center group-hover:justify-start",
-            location.pathname.startsWith("/inbox/settings")
-              ? "bg-blue-50 text-blue-700"
-              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
-          ].join(" ")}
-          title="Configurações"
-        >
-          <Settings2Icon className="h-5 w-5 flex-shrink-0" />
-          <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[220px] group-hover:opacity-100">
-            Configurações
-          </span>
-        </button>
-      </div>
     </aside>
   );
 };
-
