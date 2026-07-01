@@ -235,7 +235,7 @@ const EmptyState: React.FC<{ onAction: () => void }> = ({ onAction }) => (
       Nenhum atendente cadastrado
     </h3>
     <p className="mt-2 max-w-md text-sm text-gray-500">
-      Adicione atentendes para iniciar a distribuir conversas, organizar setores
+      Adicione atendentes para iniciar a distribuir conversas, organizar setores
       e permissões de acesso
     </p>
     <button

@@ -120,7 +120,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
     return membership?.department_id ? [membership.department_id] : [];
   }, [authUser, clinicId, membership?.department_id]);
 
-  // Guardamos referências estáveis para uso interno nos efeitos do Realtime
   const getAccessibleDeptIdsRef = useRef(getAccessibleDepartmentIds);
   useEffect(() => {
     getAccessibleDeptIdsRef.current = getAccessibleDepartmentIds;
@@ -146,7 +145,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
     }, cooldownMs - elapsed);
   }, []);
 
-  // Armazena a contagem atualizada para checagem síncrona dentro do fetcher sem quebrar cache
   const conversationsLengthRef = useRef(0);
   useEffect(() => {
     conversationsLengthRef.current = conversations.length;
@@ -344,9 +342,9 @@ export function useConversations(options: UseConversationsOptions = {}) {
 
         setConversations(mapped);
       } catch (err: any) {
-        console.error("Erro ao buscar conversas:", err);
+        console.error("Erro ao buscar conversas (mantendo estado anterior):", err);
         setError(err);
-        setConversations([]);
+        // Proteção essencial: não limpamos mais as conversas da tela se houver um erro de infraestrutura temporário.
       } finally {
         didInitialLoadRef.current = true;
         setLoading(false);
@@ -366,7 +364,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
     scheduleRefetch(() => fetchConversations({ reason: "refetch" }));
   }, [fetchConversations, scheduleRefetch]);
 
-  // Encapsulamento em Ref garante que os Realtime Hooks nunca reiniciem por dependência do fetcher
   const scheduleRefetchRef = useRef(scheduleRefetchStable);
   useEffect(() => {
     scheduleRefetchRef.current = scheduleRefetchStable;
@@ -572,15 +569,17 @@ export function useConversations(options: UseConversationsOptions = {}) {
           const msg = payload.new as DbMessage;
           if (!msg) return;
 
+          const isInbound = msg.direction === "inbound";
+
           setConversations((current) => {
             const idx = current.findIndex((c) => c.id === msg.conversation_id);
             if (idx === -1) {
-              scheduleRefetchRef.current();
+              // Só consulta o banco de dados se for uma mensagem de um cliente novo que não está na lista!
+              if (isInbound) scheduleRefetchRef.current();
               return current;
             }
 
             const old = current[idx];
-            const isInbound = msg.direction === "inbound";
             const preview = getPreview(msg as any);
 
             const updated: Conversation = {
@@ -588,7 +587,6 @@ export function useConversations(options: UseConversationsOptions = {}) {
               lastMessage: preview.text || old.lastMessage,
               lastMessageType: preview.type ?? old.lastMessageType,
               lastTimestamp: msg.sent_at ?? msg.created_at ?? old.lastTimestamp,
-
               unreadCount: isInbound
                 ? (old.unreadCount ?? 0) + 1
                 : (old.unreadCount ?? 0),
@@ -606,7 +604,11 @@ export function useConversations(options: UseConversationsOptions = {}) {
             return clone;
           });
 
-          scheduleRefetchRef.current();
+          // 🚀 SEGUNDA PROTEÇÃO: Só agenda refetch no banco se a mensagem for de entrada.
+          // Mensagens enviadas pelo disparo (outbound) já atualizaram o estado local acima.
+          if (isInbound) {
+            scheduleRefetchRef.current();
+          }
         },
       )
       .subscribe((status) => {

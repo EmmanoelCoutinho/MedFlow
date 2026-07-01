@@ -686,6 +686,7 @@ export const Chat: React.FC = () => {
 
     setClosingConversation(true);
 
+    // Invoca a Edge Function que encerra o atendimento e envia a pesquisa CSAT de 0 a 5
     const { data, error } = await supabase.functions.invoke(
       "close-conversation",
       {
@@ -695,6 +696,7 @@ export const Chat: React.FC = () => {
 
     if (error) {
       console.error("Erro ao finalizar conversa:", error);
+      toast.error("Não foi possível finalizar o atendimento.");
       setClosingConversation(false);
       return;
     }
@@ -712,11 +714,12 @@ export const Chat: React.FC = () => {
       );
     }
 
-    await loadConversation();
+    toast.success("Atendimento encerrado. Pesquisa de satisfação enviada!");
     setClosingConversation(false);
 
+    // Retorna o operador para a tela de listagem
     navigate("/inbox");
-  }, [id, loadConversation, navigate]);
+  }, [id, navigate]);
 
   const handleTransferConversation = useCallback(
     async (target: { departmentId: string }) => {

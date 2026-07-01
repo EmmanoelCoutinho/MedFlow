@@ -24,10 +24,6 @@ import { useTags, AvailableTag } from "../hooks/useTags"; // Importando o novo h
 
 type TargetType = "all" | "tags";
 
-interface MassMessagesPageProps {
-  // initialTags removido daqui pois agora buscamos direto do Supabase via hook
-}
-
 export const MassMessagesPage: React.FC<MassMessagesPageProps> = () => {
   const [targetType, setTargetType] = useState<TargetType>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);

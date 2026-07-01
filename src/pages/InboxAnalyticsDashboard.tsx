@@ -67,8 +67,8 @@ const Pill = ({
   <button
     type="button"
     onClick={onClick}
-    className={`rounded-full px-2 py-1 text-xs ${
-      active ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+    className={`rounded-full px-2 py-1 text-xs transition-colors ${
+      active ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
     }`}
   >
     {label}
@@ -87,7 +87,7 @@ const SectionHeader = ({
   <div className="mb-3 flex items-start justify-between gap-3">
     <div>
       <h2 className="text-lg font-semibold text-slate-700">{title}</h2>
-      {subtitle ? <p className="text-md text-slate-500">{subtitle}</p> : null}
+      {subtitle ? <p className="text-sm text-slate-500">{subtitle}</p> : null}
     </div>
     {right}
   </div>
@@ -125,7 +125,7 @@ const HorizontalBars = ({
             </div>
             <div className="h-2 rounded-full bg-slate-100">
               <div
-                className="h-2 rounded-full"
+                className="h-2 rounded-full transition-all duration-500"
                 style={{
                   width: `${width}%`,
                   backgroundColor: color ?? "#2563eb",
@@ -166,7 +166,7 @@ const DailyLeadsChart = ({
           </span>
           <div className="h-2 flex-1 rounded-full bg-slate-100">
             <div
-              className="h-2 rounded-full bg-cyan-500"
+              className="h-2 rounded-full bg-cyan-500 transition-all duration-500"
               style={{ width: `${Math.max(4, (row.leads / max) * 100)}%` }}
             />
           </div>
@@ -182,7 +182,6 @@ const DailyLeadsChart = ({
 const KpiCard = ({
   label,
   value,
-  hint,
 }: {
   label: string;
   value: React.ReactNode;
@@ -191,9 +190,8 @@ const KpiCard = ({
   <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
     <div className="flex items-start justify-between gap-2">
       <p className="text-sm text-slate-500">{label}</p>
-      {/* {hint ? <span className="text-xs text-slate-400">{hint}</span> : null} */}
     </div>
-    <p className="mt-3 text-3xl font-semibold text-slate-900 text-center">
+    <p className="mt-3 text-center text-3xl font-semibold text-slate-900">
       {value}
     </p>
   </article>
@@ -228,7 +226,9 @@ export const InboxAnalyticsDashboard: React.FC = () => {
   const [departments, setDepartments] = useState<
     Array<{ id: string; name: string }>
   >([]);
-  const [users, setUsers] = useState<Array<{ user_id: string; name: string }>>(
+  
+  // Atualizado: Definição do estado incluindo name e email para tratamento seguro
+  const [users, setUsers] = useState<Array<{ user_id: string; name: string; email?: string }>>(
     [],
   );
 
@@ -242,7 +242,6 @@ export const InboxAnalyticsDashboard: React.FC = () => {
     const urlStart = searchParams.get("start") ?? defaults.start;
     const urlEnd = searchParams.get("end") ?? defaults.end;
 
-    // importante: se vier "", não aplicar
     const departmentId = searchParams.get("department_id") || undefined;
     const assignedUserId = searchParams.get("assigned_user_id") || undefined;
 
@@ -278,7 +277,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
         .order("name"),
       supabase
         .from("clinic_users")
-        .select("user_id,name")
+        .select("user_id,name,email") // Atualizado: Buscando também o e-mail preventivamente
         .eq("clinic_id", clinicId)
         .order("name"),
     ]).then(([depRes, usersRes]) => {
@@ -303,11 +302,12 @@ export const InboxAnalyticsDashboard: React.FC = () => {
         setAnalytics(analyticsResult);
         setBacklog(backlogResult);
       } catch (fetchError: unknown) {
-        // postgrest errors nem sempre são instance of Error
         const message =
-          (fetchError as any)?.message ||
-          (fetchError as any)?.error_description ||
-          "Erro ao carregar analytics.";
+          fetchError instanceof Error
+            ? fetchError.message
+            : typeof fetchError === "object" && fetchError !== null && "message" in fetchError
+            ? String((fetchError as { message: unknown }).message)
+            : "Erro ao carregar analytics.";
         setError(message);
       } finally {
         setLoading(false);
@@ -330,16 +330,6 @@ export const InboxAnalyticsDashboard: React.FC = () => {
     setSearchParams(params);
   };
 
-  const clearFilters = () => {
-    const range = defaultDateRange();
-    setSearchParams(
-      new URLSearchParams({
-        start: range.start,
-        end: range.end,
-      }),
-    );
-  };
-
   const toggleChannel = (channel: string) => {
     setDraftChannels((previous) =>
       previous.includes(channel)
@@ -359,8 +349,6 @@ export const InboxAnalyticsDashboard: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(backlog.length / 20));
   const hasData = !!analytics && analytics.kpis.leads > 0;
-
-  // novos KPIs “amigáveis”
   const backlogTotal = backlog.length;
 
   return (
@@ -376,8 +364,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                   Análise & Atendimento
                 </h1>
                 <p className="text-sm text-slate-500">
-                  Visão executiva, decisão por canal/departamento e ação
-                  imediata no backlog
+                  Visão executiva, decisão por canal/departamento e ação imediata no backlog
                 </p>
               </div>
             </div>
@@ -385,17 +372,10 @@ export const InboxAnalyticsDashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={applyFilters}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
               >
                 Aplicar
               </button>
-              {/* <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-              >
-                Limpar
-              </button> */}
             </div>
           </div>
 
@@ -404,13 +384,13 @@ export const InboxAnalyticsDashboard: React.FC = () => {
               type="date"
               value={draftStart}
               onChange={(event) => setDraftStart(event.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
             <input
               type="date"
               value={draftEnd}
               onChange={(event) => setDraftEnd(event.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
 
             <div className="rounded-md border border-slate-300 p-2">
@@ -430,7 +410,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
             <select
               value={draftDepartmentId}
               onChange={(event) => setDraftDepartmentId(event.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Todos departamentos</option>
               {departments.map((department) => (
@@ -440,17 +420,21 @@ export const InboxAnalyticsDashboard: React.FC = () => {
               ))}
             </select>
 
+            {/* Atualizado: Select de Atendentes com tratamento de fallback amigável */}
             <select
               value={draftAssignedUserId}
               onChange={(event) => setDraftAssignedUserId(event.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Todos atendentes</option>
-              {users.map((user) => (
-                <option key={user.user_id} value={user.user_id}>
-                  {user.name || user.user_id}
-                </option>
-              ))}
+              {users.map((user) => {
+                const displayName = user.name?.trim() || user.email?.split("@")[0] || "Usuário sem nome";
+                return (
+                  <option key={user.user_id} value={user.user_id}>
+                    {displayName}
+                  </option>
+                );
+              })}
             </select>
           </div>
         </section>
@@ -463,7 +447,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
             <button
               type="button"
               onClick={applyFilters}
-              className="mt-3 rounded-md bg-red-600 px-3 py-2 text-sm text-white"
+              className="mt-3 rounded-md bg-red-600 px-3 py-2 text-sm text-white transition-colors hover:bg-red-700"
             >
               Tentar novamente
             </button>
@@ -478,43 +462,23 @@ export const InboxAnalyticsDashboard: React.FC = () => {
           />
           <section className="grid gap-4 md:grid-cols-4">
             {loading || !analytics ? (
-              Array.from({ length: 4 }).map((_, index) => (
-                <KpiSkeleton key={index} />
-              ))
+              Array.from({ length: 4 }).map((_, index) => <KpiSkeleton key={index} />)
             ) : (
               <>
                 <KpiCard label="Novos leads" value={analytics.kpis.leads} />
-                <KpiCard
-                  label="Mensagens sem resposta"
-                  value={backlogTotal}
-                  hint="No momento"
-                />
-                <KpiCard
-                  label="Mensagens recebidas"
-                  value={analytics.kpis.inboundMessages}
-                  hint="Período"
-                />
-                <KpiCard
-                  label="Mensagens enviadas"
-                  value={analytics.kpis.outboundMessages}
-                  hint="Período"
-                />
+                <KpiCard label="Mensagens sem resposta" value={backlogTotal} />
+                <KpiCard label="Mensagens recebidas" value={analytics.kpis.inboundMessages} />
+                <KpiCard label="Mensagens enviadas" value={analytics.kpis.outboundMessages} />
               </>
             )}
           </section>
 
           <section className="grid gap-4 md:grid-cols-4">
             {loading || !analytics ? (
-              Array.from({ length: 4 }).map((_, index) => (
-                <KpiSkeleton key={index} />
-              ))
+              Array.from({ length: 4 }).map((_, index) => <KpiSkeleton key={index} />)
             ) : (
               <>
-                <KpiCard
-                  label="Conversas ativas"
-                  value={analytics.kpis.activeConversations}
-                  hint=""
-                />
+                <KpiCard label="Conversas ativas" value={analytics.kpis.activeConversations} />
                 <KpiCard
                   label="Tempo típico de 1ª resposta"
                   value={formatSeconds(analytics.kpis.p50FirstResponseSec)}
@@ -522,7 +486,6 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                 <KpiCard
                   label="90% respondem em até"
                   value={formatSeconds(analytics.kpis.p90FirstResponseSec)}
-                  hint="Tempo alto"
                 />
                 <KpiCard
                   label="Dentro do SLA (até 2 min)"
@@ -531,7 +494,6 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                       ? `${analytics.kpis.withinSlaPct}%`
                       : "-"
                   }
-                  hint="SLA"
                 />
               </>
             )}
@@ -540,9 +502,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
 
         {!loading && !error && !hasData ? (
           <section className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600">
-            <p className="font-medium">
-              Nenhum dado para o período selecionado.
-            </p>
+            <p className="font-medium">Nenhum dado para o período selecionado.</p>
             <p className="text-sm">Tente ampliar o período.</p>
           </section>
         ) : null}
@@ -559,31 +519,24 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                 <SectionHeader title="Leads por canal" />
                 <div className="space-y-3">
                   {analytics.leadsByChannel.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      Sem dados no período.
-                    </p>
+                    <p className="text-sm text-slate-500">Sem dados no período.</p>
                   ) : (
                     analytics.leadsByChannel.map((item) => (
                       <div key={item.channel} className="space-y-1">
                         <div className="flex items-center justify-between text-xs text-slate-600">
-                          <span>
-                            {CHANNEL_LABEL[item.channel] ?? item.channel}
-                          </span>
+                          <span>{CHANNEL_LABEL[item.channel] ?? item.channel}</span>
                           <span>{item.leads}</span>
                         </div>
                         <div className="h-2 rounded-full bg-slate-100">
                           <div
-                            className="h-2 rounded-full"
+                            className="h-2 rounded-full transition-all duration-500"
                             style={{
                               width: `${Math.max(
                                 6,
-                                (item.leads /
-                                  Math.max(1, analytics.kpis.leads)) *
-                                  100,
+                                (item.leads / Math.max(1, analytics.kpis.leads)) * 100,
                               )}%`,
                               backgroundColor:
-                                CHANNEL_COLORS[item.channel] ??
-                                CHANNEL_COLORS.unknown,
+                                CHANNEL_COLORS[item.channel] ?? CHANNEL_COLORS.unknown,
                             }}
                           />
                         </div>
@@ -602,12 +555,23 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                 />
               </article>
 
+              {/* CARD ADICIONADO: TOP ATENDENTES */}
+              <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <SectionHeader title="Top Atendentes" subtitle="Distribuição de novos leads por responsável" />
+                <HorizontalBars
+                  rows={analytics.leadsByUserId || []}
+                  labelKey="userName"
+                  valueKey="leads"
+                  color="#f59e0b"
+                />
+              </article>
+
               <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <SectionHeader title="Evolução diária de leads" />
                 <DailyLeadsChart rows={analytics.dailyLeads} />
               </article>
 
-              <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
                 <SectionHeader
                   title="Tempo de 1ª resposta por canal"
                   subtitle="Comparativo por canal (tempo alto = 90% respondem em até)."
@@ -622,8 +586,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                   color="#14b8a6"
                 />
                 <p className="mt-3 text-xs text-slate-500">
-                  A barra usa o tempo “alto” (90%). O tempo “típico” (50%) fica
-                  disponível no detalhe.
+                  A barra usa o tempo “alto” (90%). O tempo “típico” (50%) fica disponível no detalhe.
                 </p>
                 <div className="mt-3 overflow-x-auto">
                   <table className="min-w-full text-sm">
@@ -637,19 +600,12 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                     </thead>
                     <tbody>
                       {analytics.slaByChannel.map((row) => (
-                        <tr
-                          key={row.channel}
-                          className="border-b border-slate-100"
-                        >
+                        <tr key={row.channel} className="border-b border-slate-100">
                           <td className="px-2 py-2">
                             {CHANNEL_LABEL[row.channel] ?? row.channel}
                           </td>
-                          <td className="px-2 py-2">
-                            {formatSeconds(row.p50Sec)}
-                          </td>
-                          <td className="px-2 py-2">
-                            {formatSeconds(row.p90Sec)}
-                          </td>
+                          <td className="px-2 py-2">{formatSeconds(row.p50Sec)}</td>
+                          <td className="px-2 py-2">{formatSeconds(row.p90Sec)}</td>
                           <td className="px-2 py-2">{row.withinSlaPct}%</td>
                         </tr>
                       ))}
@@ -679,10 +635,7 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                 </p>
               </div>
               <div className="text-sm text-slate-600">
-                Total:{" "}
-                <span className="font-semibold text-slate-900">
-                  {backlogTotal}
-                </span>
+                Total: <span className="font-semibold text-slate-900">{backlogTotal}</span>
               </div>
             </div>
 
@@ -722,23 +675,21 @@ export const InboxAnalyticsDashboard: React.FC = () => {
                       <tr
                         key={item.conversationId}
                         className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
-                        onClick={() =>
-                          navigate(`/inbox/chat/${item.conversationId}`)
-                        }
+                        onClick={() => navigate(`/inbox/chat/${item.conversationId}`)}
                       >
-                        <td className="px-2 py-2">{item.contact}</td>
+                        <td className="px-2 py-2 font-medium text-slate-700">{item.contact}</td>
                         <td className="px-2 py-2">
                           {CHANNEL_LABEL[item.channel] ?? item.channel}
                         </td>
                         <td className="px-2 py-2">{item.department}</td>
                         <td className="px-2 py-2">{item.assignedTo}</td>
                         <td className="px-2 py-2">
-                          <p>{item.lastMessageText}</p>
-                          <p className="text-xs text-slate-500">
+                          <p className="max-w-xs truncate text-slate-700">{item.lastMessageText}</p>
+                          <p className="text-xs text-slate-400">
                             {new Date(item.lastMessageAt).toLocaleString()}
                           </p>
                         </td>
-                        <td className="px-2 py-2">{item.minutesWaiting}</td>
+                        <td className="px-2 py-2 font-semibold text-slate-700">{item.minutesWaiting}</td>
                       </tr>
                     ))
                   )}
@@ -749,21 +700,19 @@ export const InboxAnalyticsDashboard: React.FC = () => {
             <div className="mt-4 flex items-center justify-end gap-2 text-sm">
               <button
                 type="button"
-                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+                className="rounded border border-slate-300 px-2 py-1 transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={page === 1}
               >
                 Anterior
               </button>
-              <span>
+              <span className="text-slate-600">
                 Página {page} de {totalPages}
               </span>
               <button
                 type="button"
-                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
-                onClick={() =>
-                  setPage((current) => Math.min(totalPages, current + 1))
-                }
+                className="rounded border border-slate-300 px-2 py-1 transition-colors hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                 disabled={page === totalPages}
               >
                 Próxima
